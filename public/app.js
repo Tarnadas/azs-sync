@@ -450,8 +450,8 @@ function howItWorksCard() {
       { class: 'steps' },
       h('li', {}, h('strong', {}, 'Create an account '), 'with a passkey.'),
       h('li', {}, h('strong', {}, 'Optional: '), 'click Recovery code on the dashboard if you want a fallback for a device without your passkey.'),
-      h('li', {}, h('strong', {}, 'Open the dashboard '), 'after signing in. It already shows a phone setup QR.'),
-      h('li', {}, h('strong', {}, 'Scan the QR '), 'with your phone. The setup page walks through Vivaldi, Tampermonkey, the userscript, and the game.'),
+      h('li', {}, h('strong', {}, 'Open the dashboard '), 'after signing in. It already shows a device setup QR.'),
+      h('li', {}, h('strong', {}, 'Scan the QR or copy the setup link '), 'to another device. The setup page walks through Vivaldi, Tampermonkey, the userscript, and the game.'),
       h('li', {}, h('strong', {}, 'Play normally. '), 'The script compares the sealed save and pushes or pulls when it changes.'),
       h('li', {}, h('strong', {}, 'Brave Android? '), 'Skip the QR and use manual transfer on the dashboard.'),
     ),
@@ -466,7 +466,7 @@ function renderAuth(error = null) {
       'div',
       { class: 'hero' },
       h('h1', {}, 'Your save, on every device.'),
-      h('p', {}, 'Azeroth Survivors keeps its account in the browser. This service syncs that sealed save through a private, passkey-protected account — desktop to phone and back. Anyone can create their own account.'),
+      h('p', {}, 'Azeroth Survivors keeps its account in the browser. This service syncs that sealed save through a private, passkey-protected account — between desktops, laptops, tablets, and phones. Anyone can create their own account.'),
     ),
   );
 
@@ -626,18 +626,18 @@ function gamePairLinkForAccount() {
   return `https://wow.aethus.pl/#azs-pair=${b64urlEncodeText(JSON.stringify({
     a: location.origin,
     t: state.pairingToken,
-    n: 'Phone',
+    n: 'Device',
   }))}`;
 }
 
-function phoneSyncCard() {
+function deviceSyncCard() {
   const setupLink = setupLinkForAccount();
   const gameLink = gamePairLinkForAccount();
   const qr = setupLink ? qrDataUrl(setupLink) : null;
 
-  const copy = h('button', { class: 'btn' }, 'Copy phone setup link');
+  const copy = h('button', { class: 'btn' }, 'Copy setup link');
   copy.disabled = !setupLink;
-  copy.addEventListener('click', () => copyText(setupLink, 'Phone setup link copied'));
+  copy.addEventListener('click', () => copyText(setupLink, 'Setup link copied'));
 
   const gameInput = h('input', {
     class: 'input mono',
@@ -683,10 +683,10 @@ function phoneSyncCard() {
   return h(
     'section',
     { class: 'card stack' },
-    h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Sync to your phone'), h('p', { class: 'muted small' }, 'Scan this with your phone camera. It opens a setup page that walks through Vivaldi, Tampermonkey, the userscript, and the game link. No create-device step.'))),
+    h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Sync another device'), h('p', { class: 'muted small' }, 'Scan this with a phone or tablet, or copy the setup link and open it on another computer. It opens a setup page with the Vivaldi/Tampermonkey/userscript steps and the game link. No create-device step.'))),
     qr
-      ? h('div', { class: 'qr-wrap' }, h('img', { class: 'qr', src: qr, alt: 'Phone setup QR code', width: '280', height: '280' }))
-      : h('div', { class: 'notice error' }, h('p', {}, 'Could not draw the QR code. Use Copy phone setup link below.')),
+      ? h('div', { class: 'qr-wrap' }, h('img', { class: 'qr', src: qr, alt: 'Device setup QR code', width: '280', height: '280' }))
+      : h('div', { class: 'notice error' }, h('p', {}, 'Could not draw the QR code. Use Copy setup link below.')),
     h('div', { class: 'row' }, copy, open, reset),
     h(
       'div',
@@ -695,7 +695,7 @@ function phoneSyncCard() {
       h('div', { class: 'token-value' }, gameInput, copyGame),
     ),
     h('div', { class: 'notice' }, h('p', {}, 'This QR and game link are your account pairing key. Treat them like a password; anyone with them can sync this account. Reset the QR to invalidate both.')),
-    h('p', { class: 'muted small' }, 'The phone needs no passkey or dashboard login. Scan the QR; the setup page includes automatic sync and a token-authorized Manual transfer fallback.'),
+    h('p', { class: 'muted small' }, 'The other device needs no passkey or dashboard login. Scan the QR or open the copied setup link; it includes automatic sync and a token-authorized Manual transfer fallback.'),
     h('p', { class: 'muted small' }, 'On a desktop, open the setup page to install Tampermonkey and the userscript. On Brave for Android, use Manual transfer; automatic sync needs Vivaldi or another Chromium browser with extensions.'),
   );
 }
@@ -830,12 +830,12 @@ function renderDashboard() {
       h(
         'div',
         { class: 'notice error' },
-        h('p', {}, h('strong', {}, 'This dashboard is running on localhost. '), 'A phone cannot reach it. Deploy the Worker and use the deployed URL before pairing a phone or using manual transfer on another device.'),
+        h('p', {}, h('strong', {}, 'This dashboard is running on localhost. '), 'Another device cannot reach it. Deploy the Worker and use the deployed URL before syncing another device.'),
         h('p', {}, 'A passkey created on localhost is bound to localhost; create the account again on the deployed URL.'),
       ),
     );
   }
-  stack.append(phoneSyncCard(), saveCard(), historyCard());
+  stack.append(deviceSyncCard(), saveCard(), historyCard());
   app.append(stack);
 }
 

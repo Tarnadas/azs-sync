@@ -14,21 +14,25 @@ You can use this instance. There is no invite and no operator approval: create a
 
 1. Open the hosted instance on your desktop.
 2. Click **Create an account**, complete the Turnstile check, and create a passkey.
-3. The dashboard immediately shows a **Sync to your phone** QR. There is no “create device” step.
-4. Scan the QR with your phone camera.
+3. The dashboard immediately shows a **Sync another device** QR. There is no “create device” step.
+4. Scan the QR with a phone or tablet, **or copy the setup link and open it on another desktop/laptop**. A computer without a camera uses the copied link.
 5. Follow the setup page:
    - **Vivaldi on Android:** install Tampermonkey, install the userscript, tap **Open game & pair**. Automatic sync.
-   - **Brave or another Android browser:** use **Manual transfer** on the setup page. No passkey and no dashboard login are needed on the phone.
+   - **Brave or another Android browser:** use **Manual transfer** on the setup page. No passkey and no dashboard login are needed on the device.
+   - **Another desktop/laptop:** install Tampermonkey, install the userscript, and open the game from the setup page.
 6. Play. The small **AZS** pill in the bottom-right of the game shows sync status.
 
-The dashboard also has a copyable **Game pair link** if you want to paste the direct game URL instead of scanning.
+The dashboard also has a copyable **Game pair link** if you want to paste the direct game URL instead of scanning. Any number of desktops, laptops, tablets, and phones can use the same setup link; there is no per-device list.
 
-### What the phone needs
+### What another device needs
 
-The phone **does not need a passkey, recovery code, or dashboard login** for either path. The QR contains an account pairing key; the setup page uses it for automatic sync and for token-authorized `.sav` upload/download.
+The other device **does not need a passkey, recovery code, or dashboard login** for either path. The QR contains an account pairing key; the setup page uses it for automatic sync and for token-authorized `.sav` upload/download.
 
-- **Automatic:** Vivaldi 8.2+ with Tampermonkey. The game needs WebGPU (Android 12+ with a supported GPU).
-- **Manual:** works in Brave for Android today. Export a `.sav` from the game, upload it on the setup page, then download/import on the other device. The setup page is the QR page; no login.
+- **Automatic on desktop:** Brave/Chrome/Edge + Tampermonkey. The setup page detects a desktop and shows the Tampermonkey/userscript steps.
+- **Automatic on Android:** Vivaldi 8.2+ + Tampermonkey. The game needs WebGPU (Android 12+ with a supported GPU).
+- **Manual:** works in any browser, including Brave Android. Export a `.sav` from the game, upload it on the setup page, then download/import on another device. The setup page is the QR page; no login.
+
+The passkey is only for the **desktop dashboard**, where you manage the QR and optional recovery code.
 
 The passkey is only for the **desktop dashboard**, where you manage the QR and optional recovery code.
 
@@ -46,7 +50,7 @@ The passkey is only for the **desktop dashboard**, where you manage the QR and o
 **The QR opened Brave, not Vivaldi.**  
 The setup page detects this and offers **Copy setup link**. Install Vivaldi, paste the link into Vivaldi, or make Vivaldi your default browser and scan again.
 
-**The game does not boot on the phone.**  
+**The game does not boot on a phone or tablet.**  
 Check WebGPU support. Try a current Vivaldi/Lemur/Quetta on Android 12+ with a supported GPU. The desktop/Windows build is a fallback.
 
 **The pairing link says it was reset or is invalid.**  
@@ -55,8 +59,8 @@ Refresh the dashboard and scan/copy the current QR. **Reset QR** invalidates old
 **The AZS pill says “newer” or “conflict.”**  
 “Newer” means the server has a newer save; open the pill and choose **Sync now**. “Conflict” means both sides changed; choose the save to keep. The other is kept in history.
 
-**History only shows an old “Phone” row.**  
-History lists the version that was replaced, and the device label came from the old pairing flow. Look at the current save in the Manual transfer card; a desktop push becomes the new current version, and the old version appears in history.
+**History only shows an old device label.**  
+History lists the version that was replaced, and the device label came from the old pairing flow. Look at the current save in the Manual transfer card; a new push becomes the current version, and the old version appears in history.
 
 **I lost the save on one device.**  
 Export from the game (Options → Saves → Export Save) before making changes. The userscript panel’s **Local .sav** and **Backup .sav** buttons download the browser’s current and pre-pull saves. The dashboard can also upload an exported `.sav`.
@@ -71,7 +75,7 @@ Export from the game (Options → Saves → Export Save) before making changes. 
 - Passkey (WebAuthn) accounts; no passwords, no operator-wide login.
 - One account-level pairing key/QR; no per-device list.
 - A Tampermonkey userscript runs on `https://wow.aethus.pl/*` and pushes/pulls automatically.
-- A token-authorized phone setup page (`/pair#t=…`) provides automatic setup instructions and manual upload/download without a dashboard session.
+- A token-authorized device setup page (`/pair#t=…`) provides automatic setup instructions and manual upload/download without a dashboard session.
 - Optional recovery codes and optional Cloudflare Turnstile.
 - Per-IP rate limits on account creation, recovery, and passkey login.
 
@@ -79,7 +83,7 @@ Export from the game (Options → Saves → Export Save) before making changes. 
 [Vivaldi Android + Tampermonkey] ─┐
                                   ├─ HTTPS ─> [Cloudflare Worker + D1]
 [Brave desktop + Tampermonkey] ───┘             ├─ passkey dashboard + account QR
-                                                ├─ phone setup / manual page
+                                                ├─ device setup / manual page
                                                 └─ sealed save history
 ```
 
@@ -88,7 +92,7 @@ Export from the game (Options → Saves → Export Save) before making changes. 
 - Node.js 20+ and npm.
 - A Cloudflare account (free tier is enough).
 - A browser with WebAuthn for the dashboard.
-- For automatic phone sync: a Chromium-based Android browser with Chrome extension support. **Vivaldi 8.2+** is recommended; Lemur or Quetta also work. Brave for Android does not support stable extensions yet.
+- For automatic sync on Android: a Chromium-based browser with Chrome extension support. **Vivaldi 8.2+** is recommended; Lemur or Quetta also work. Brave for Android does not support stable extensions yet.
 - The game needs WebGPU: Android 12+ with a current Chromium and supported GPU.
 
 ### Deploy your own
@@ -140,7 +144,7 @@ npm run dev
 # http://localhost:8787
 ```
 
-The local instance is **same-machine only**. A phone cannot reach `http://localhost:8787`, and a QR generated there embeds localhost. Deploy before pairing a phone. A passkey made on localhost is bound to localhost.
+The local instance is **same-machine only**. Another device cannot reach `http://localhost:8787`, and a QR generated there embeds localhost. Deploy before syncing another device. A passkey made on localhost is bound to localhost.
 
 For local Turnstile UI testing, use Cloudflare’s documented test keys in `.dev.vars`; they always pass and are not protection.
 
@@ -170,7 +174,7 @@ The userscript authenticates with the account pairing token:
 
 ```http
 Authorization: Bearer azs_…
-X-AZS-Device: Phone
+X-AZS-Device: Desktop
 ```
 
 | Method | Path | Auth | Purpose |
@@ -216,7 +220,7 @@ CORS is restricted to `https://wow.aethus.pl` for the userscript. The account pa
 - **One writer at a time.** Two devices without syncing create a conflict.
 - **One game tab at a time.** Tabs share localStorage and can race; the server rejects the stale writer.
 - The game writes saves when you leave a shop/end a run; only written saves sync.
-- The phone setup page and direct game link require the userscript to be installed for automatic sync; Android/Tampermonkey always requires user confirmation to install.
+- The device setup page and direct game link require the userscript to be installed for automatic sync; browsers always require user confirmation to install an extension.
 - No account-deletion UI yet.
 
 ### Layout
@@ -231,8 +235,8 @@ src/ratelimit.js   per-IP auth rate limits
 src/turnstile.js   optional Turnstile verification
 src/sync.js        pure sync decision + validation
 src/util.js        base64url, cookies, JSON helpers
-public/            dashboard, phone setup page, Tampermonkey userscript
-public/pair.*      token-authorized phone setup + manual transfer page
+public/            dashboard, device setup page, Tampermonkey userscript
+public/pair.*      token-authorized device setup + manual transfer page
 public/vendor/     qrcode-generator (MIT) for the pairing QR
 migrations/        D1 schema
 test/              node:test unit tests

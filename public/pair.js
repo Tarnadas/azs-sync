@@ -13,7 +13,7 @@ const isIOS = /iPhone|iPad|iPod/i.test(ua);
 const isMobile = isAndroid || isIOS;
 const isVivaldi = /Vivaldi/i.test(ua);
 const isDesktop = !isMobile;
-const deviceName = isMobile ? 'Phone' : 'Desktop';
+const deviceName = isAndroid ? 'Android' : isIOS ? 'iOS' : 'Desktop';
 
 function el(tag, props = {}, ...children) {
   const node = document.createElement(tag);
@@ -92,7 +92,7 @@ function drawManual() {
     'div',
     { class: 'manual-box' },
     el('h3', {}, 'Manual transfer'),
-    el('p', { class: 'muted small' }, 'No passkey and no login on this phone. The QR link itself authorizes the transfer.'),
+    el('p', { class: 'muted small' }, 'No passkey and no login on this device. The QR link itself authorizes the transfer.'),
   );
 
   if (manualError) {
@@ -181,7 +181,7 @@ function drawManual() {
 
   box.append(
     el('div', { class: 'row' }, upload, file),
-    el('p', { class: 'muted small' }, 'To push this phone: export from the game, then upload. To pull: download here, then game → Options → Saves → Import Save.'),
+    el('p', { class: 'muted small' }, 'To push this device: export from the game, then upload. To pull: download here, then game → Options → Saves → Import Save.'),
   );
   manualHost.append(box);
 }
@@ -218,7 +218,7 @@ function render() {
       el(
         'section',
         { class: 'card pair-card stack' },
-        el('div', { class: 'pair-title' }, el('h1', {}, 'This setup link is incomplete'), el('p', {}, 'Open the QR or copy the phone setup link from your sync dashboard.')),
+        el('div', { class: 'pair-title' }, el('h1', {}, 'This setup link is incomplete'), el('p', {}, 'Open the QR or copy the device setup link from your sync dashboard.')),
         linkButton('Open dashboard', dashboard, true),
       ),
     );
@@ -309,7 +309,7 @@ function render() {
       el('p', {}, 'This setup link is your account pairing key. Anyone who has it can sync this account. Treat it like a password.'),
       el('div', { class: 'row' }, copySetup, copyGame),
     ),
-    el('p', { class: 'pair-foot' }, 'Neither path needs a passkey on the phone. Reset the QR from the dashboard if this link leaks; the save stays on the server.'),
+    el('p', { class: 'pair-foot' }, 'Neither path needs a passkey on this device. Reset the QR from the dashboard if this link leaks; the save stays on the server.'),
   );
 
   root.append(card);
