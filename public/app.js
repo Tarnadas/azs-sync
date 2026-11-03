@@ -6,7 +6,7 @@ const toastEl = document.querySelector('#toast');
 const state = {
   config: null,
   me: null,
-  devices: [],
+  pairingToken: null,
   history: [],
   save: null,
 };
@@ -450,12 +450,12 @@ function howItWorksCard() {
       { class: 'steps' },
       h('li', {}, h('strong', {}, 'Create an account '), 'with a passkey.'),
       h('li', {}, h('strong', {}, 'Optional: '), 'click Recovery code on the dashboard if you want a fallback for a device without your passkey.'),
-      h('li', {}, h('strong', {}, 'Install the userscript '), 'in the browser you play in.'),
-      h('li', {}, h('strong', {}, 'When you want automatic sync, '), 'click Create pairing link, then open it or scan its QR on the game page.'),
+      h('li', {}, h('strong', {}, 'Open the dashboard '), 'after signing in. It already shows a phone setup QR.'),
+      h('li', {}, h('strong', {}, 'Scan the QR '), 'with your phone. The setup page walks through Vivaldi, Tampermonkey, the userscript, and the game.'),
       h('li', {}, h('strong', {}, 'Play normally. '), 'The script compares the sealed save and pushes or pulls when it changes.'),
-      h('li', {}, h('strong', {}, 'Brave Android? '), 'Skip the link and use manual transfer on the dashboard.'),
+      h('li', {}, h('strong', {}, 'Brave Android? '), 'Skip the QR and use manual transfer on the dashboard.'),
     ),
-    h('div', { class: 'notice' }, h('p', {}, 'Every account has its own pairing link, device tokens, save, and history. Importing a save replaces the whole account; this tool never merges two saves.')),
+    h('div', { class: 'notice' }, h('p', {}, 'Every account has its own account-level pairing QR, save, and history. Importing a save replaces the whole account; this tool never merges two saves.')),
   );
 }
 
@@ -605,15 +605,6 @@ function saveCard() {
   );
 }
 
-function pairingLinkFor(device) {
-  if (!device?.token) return null;
-  return `https://wow.aethus.pl/#azs-pair=${b64urlEncodeText(JSON.stringify({
-    a: location.origin,
-    t: device.token,
-    n: device.name,
-  }))}`;
-}
-
 function qrDataUrl(link) {
   try {
     const qr = qrcode(0, 'M');
@@ -625,177 +616,60 @@ function qrDataUrl(link) {
   }
 }
 
-function showQrModal(device) {
-  const link = pairingLinkFor(device);
-  if (!link) {
-    toast('Generate a pairing link first.', true);
-    return;
-  }
-  const qr = qrDataUrl(link);
-  const linkInput = h('input', { class: 'input mono', readonly: true, value: link, spellcheck: 'false' });
-  const copy = h('button', { class: 'btn' }, 'Copy pairing link');
-  copy.addEventListener('click', () => copyText(link, 'Pairing link copied'));
-  const open = h('a', { class: 'btn btn-primary', href: link, target: '_blank', rel: 'noopener' }, 'Open game & pair');
-  const done = h('button', { class: 'btn' }, 'Done');
-  const backdrop = h('div', { class: 'modal-backdrop' });
-  const modal = h(
-    'div',
-    { class: 'modal stack' },
-    h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, `Pair ${device.name}`), h('p', { class: 'muted small' }, 'Scan the code with your phone, or copy the link into the browser that has the userscript.'))),
-    qr
-      ? h('div', { class: 'qr-wrap' }, h('img', { class: 'qr', src: qr, alt: 'Pairing QR code', width: '260', height: '260' }))
-      : h('div', { class: 'notice error' }, h('p', {}, 'Could not draw the QR code. Copy the link below instead.')),
-    h('div', { class: 'field' }, h('label', {}, 'Pairing link'), h('div', { class: 'token-value' }, linkInput, copy)),
-    h('div', { class: 'notice' }, h('p', {}, 'On Android, open this link in Vivaldi with Tampermonkey (or another extension-capable Chromium), not Brave. If scanning opens Brave, copy the link and paste it into Vivaldi.')),
-    h('div', { class: 'row' }, open, done),
-  );
-  done.addEventListener('click', () => backdrop.remove());
-  backdrop.append(modal);
-  document.body.append(backdrop);
+function setupLinkForAccount() {
+  if (!state.pairingToken) return null;
+  return `${location.origin}/pair#t=${encodeURIComponent(state.pairingToken)}`;
 }
 
-async function newPairingLink(device) {
-  try {
-    const result = await api(`/api/devices/${encodeURIComponent(device.id)}/token`, { method: 'POST' });
-    device.token = result.token;
-    toast('New pairing link generated');
-    await loadDashboard();
-    showQrModal({ ...device, token: result.token });
-  } catch (error) {
-    displayError(error);
-  }
-}
+function phoneSyncCard() {
+  const setupLink = setupLinkForAccount();
+  const qr = setupLink ? qrDataUrl(setupLink) : null;
 
-function deviceItem(device) {
-  const link = pairingLinkFor(device);
-  const showQr = h('button', { class: 'btn btn-sm' }, link ? 'Show QR' : 'Generate link');
-  showQr.addEventListener('click', () => {
-    if (link) showQrModal(device);
-    else newPairingLink(device);
-  });
+  const copy = h('button', { class: 'btn' }, 'Copy phone setup link');
+  copy.disabled = !setupLink;
+  copy.addEventListener('click', () => copyText(setupLink, 'Phone setup link copied'));
 
-  const copy = h('button', { class: 'btn btn-sm' }, 'Copy link');
-  copy.disabled = !link;
-  copy.addEventListener('click', () => copyText(pairingLinkFor(device), 'Pairing link copied'));
-
-  const revoke = h('button', { class: 'btn btn-danger btn-sm' }, 'Revoke');
-  revoke.addEventListener('click', async () => {
-    if (!confirm(`Revoke "${device.name}"? Its userscript will stop syncing.`)) return;
-    revoke.disabled = true;
-    try {
-      await api(`/api/devices/${encodeURIComponent(device.id)}`, { method: 'DELETE' });
-      toast('Device revoked');
-      await loadDashboard();
-    } catch (error) {
-      displayError(error);
-      revoke.disabled = false;
-    }
-  });
-
-  return h(
-    'div',
-    { class: 'item' },
-    h(
-      'div',
-      { class: 'item-main' },
-      h('span', { class: 'item-title' }, device.name),
-      h('span', { class: 'item-sub' }, `Created ${fmtDate(device.createdAt)} · last seen ${fmtDate(device.lastSeenAt)}${device.lastVersion ? ` · v${device.lastVersion}` : ''}`),
-    ),
-    h('div', { class: 'item-actions' }, showQr, copy, revoke),
-  );
-}
-
-function pairingCard() {
-  const sorted = [...state.devices].sort((a, b) => a.createdAt - b.createdAt);
-  const primary = sorted.find((device) => device.token) || sorted[0] || null;
-  const primaryLink = pairingLinkFor(primary);
-  const linkInput = h('input', {
-    class: 'input mono',
-    readonly: true,
-    value: primaryLink || 'No pairing link yet',
-    spellcheck: 'false',
-  });
-  const copy = h('button', { class: 'btn' }, 'Copy pairing link');
-  copy.disabled = !primaryLink;
-  copy.addEventListener('click', () => copyText(primaryLink, 'Pairing link copied'));
-
-  const showQr = h('button', { class: 'btn btn-primary' }, 'Show QR');
-  showQr.disabled = !primaryLink;
-  showQr.addEventListener('click', () => {
-    if (primaryLink) showQrModal(primary);
-    else if (primary) newPairingLink(primary);
-  });
-
-  const open = h('a', { class: 'btn', href: primaryLink || '#', target: '_blank', rel: 'noopener' }, 'Open game & pair');
-  if (!primaryLink) open.setAttribute('aria-disabled', 'true');
+  const open = h('a', {
+    class: 'btn',
+    href: setupLink || '#',
+    target: '_blank',
+    rel: 'noopener',
+  }, 'Open setup page on this device');
+  if (!setupLink) open.setAttribute('aria-disabled', 'true');
   open.addEventListener('click', (event) => {
-    if (!primaryLink) {
+    if (!setupLink) {
       event.preventDefault();
-      toast('Generate a pairing link first.', true);
+      toast('Pairing link is not available yet.', true);
     }
   });
 
-  const install = h('a', { class: 'btn btn-sm', href: '/azs-sync.user.js', target: '_blank', rel: 'noopener' }, 'Install userscript');
-
-  const createLink = h('button', { class: 'btn btn-primary' }, 'Create pairing link');
-  createLink.addEventListener('click', async () => {
-    createLink.disabled = true;
+  const reset = h('button', { class: 'btn btn-danger btn-sm' }, 'Reset QR');
+  reset.disabled = !setupLink;
+  reset.addEventListener('click', async () => {
+    if (!confirm('Reset this pairing QR? Older scans and userscripts paired with it will stop syncing. The save stays on the server.')) return;
+    reset.disabled = true;
     try {
-      await api('/api/devices', { method: 'POST', body: { name: 'Phone' } });
-      toast('Pairing link created');
-      await loadDashboard();
+      const result = await api('/api/pairing/reset', { method: 'POST' });
+      state.pairingToken = result.token;
+      toast('Pairing QR reset');
+      renderDashboard();
     } catch (error) {
       displayError(error);
     } finally {
-      createLink.disabled = false;
-    }
-  });
-
-  const addName = h('input', {
-    class: 'input',
-    type: 'text',
-    maxlength: '60',
-    placeholder: 'Device name',
-    value: /Android|iPhone|iPad/i.test(navigator.userAgent) ? 'Phone' : 'Desktop',
-  });
-  const add = h('button', { class: 'btn' }, 'Add device');
-  add.addEventListener('click', async () => {
-    add.disabled = true;
-    try {
-      await api('/api/devices', { method: 'POST', body: { name: addName.value.trim() || 'Device' } });
-      toast('Device added');
-      await loadDashboard();
-    } catch (error) {
-      displayError(error);
-    } finally {
-      add.disabled = false;
+      reset.disabled = false;
     }
   });
 
   return h(
     'section',
     { class: 'card stack' },
-    h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Automatic sync'), h('p', { class: 'muted small' }, 'Pair a phone or another computer with the userscript. Optional — Brave on Android can use manual transfer below.'))),
-    primary
-      ? h(
-          'div',
-          { class: 'stack' },
-          h('div', { class: 'field' }, h('label', {}, `Pairing link for ${primary.name}`), h('div', { class: 'token-value' }, linkInput, copy)),
-          h('div', { class: 'row' }, showQr, open, install),
-        )
-      : h(
-          'div',
-          { class: 'stack' },
-          h('div', { class: 'empty' }, 'No pairing link yet. Create one only when you want to pair the userscript.'),
-          createLink,
-        ),
-    h('div', { class: 'divider-line' }),
-    h('h3', {}, 'Paired devices'),
-    state.devices.length
-      ? h('div', { class: 'list' }, ...state.devices.map(deviceItem))
-      : h('div', { class: 'empty' }, 'No devices yet.'),
-    h('div', { class: 'row' }, h('div', { class: 'grow' }, addName), add),
-    h('div', { class: 'notice' }, h('p', {}, 'Desktop: install Tampermonkey, then open the pairing link or click Install userscript. Android auto-sync: install Tampermonkey in Vivaldi 8.2+; a QR scan may open Brave, so use Copy pairing link and paste it into Vivaldi.')),
+    h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Sync to your phone'), h('p', { class: 'muted small' }, 'Scan this with your phone camera. It opens a setup page that walks through Vivaldi, Tampermonkey, the userscript, and the game link. No create-device step.'))),
+    qr
+      ? h('div', { class: 'qr-wrap' }, h('img', { class: 'qr', src: qr, alt: 'Phone setup QR code', width: '280', height: '280' }))
+      : h('div', { class: 'notice error' }, h('p', {}, 'Could not draw the QR code. Use Copy phone setup link below.')),
+    h('div', { class: 'row' }, copy, open, reset),
+    h('div', { class: 'notice' }, h('p', {}, 'This QR is your account pairing key. Treat it like a password; anyone with it can sync this account. Reset it to invalidate old scans.')),
+    h('p', { class: 'muted small' }, 'On a desktop, open the setup page to install Tampermonkey and the userscript. On Brave for Android, use Manual transfer below; automatic sync needs Vivaldi or another Chromium browser with extensions.'),
   );
 }
 
@@ -905,12 +779,12 @@ function dashboardHeader() {
 }
 
 async function loadDashboard() {
-  const [devices, history, save] = await Promise.all([
-    api('/api/devices'),
+  const [pairing, history, save] = await Promise.all([
+    api('/api/pairing'),
     api('/api/history'),
     api('/api/save'),
   ]);
-  state.devices = devices.items || [];
+  state.pairingToken = pairing.token;
   state.history = history.items || [];
   state.save = save;
   renderDashboard();
@@ -934,7 +808,7 @@ function renderDashboard() {
       ),
     );
   }
-  stack.append(pairingCard(), saveCard(), historyCard());
+  stack.append(phoneSyncCard(), saveCard(), historyCard());
   app.append(stack);
 }
 

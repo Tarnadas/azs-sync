@@ -12,6 +12,7 @@ import {
 } from './auth.js';
 import { enforceRateLimit } from './ratelimit.js';
 import { verifyTurnstile } from './turnstile.js';
+import { ensurePairingToken, resetPairingToken } from './pairing.js';
 import {
   authenticateDevice,
   createDevice,
@@ -32,7 +33,7 @@ import {
 const GAME_ORIGIN = 'https://wow.aethus.pl';
 const API_CORS_HEADERS = {
   'access-control-allow-methods': 'GET, POST, OPTIONS',
-  'access-control-allow-headers': 'Authorization, Content-Type',
+  'access-control-allow-headers': 'Authorization, Content-Type, X-AZS-Device',
   'access-control-max-age': '86400',
 };
 
@@ -152,6 +153,19 @@ async function handleAccount(request, env, url) {
     const user = await requireSession(request, env);
     const recoveryCode = await createRecoveryCode(env, user);
     return json({ recoveryCode });
+  }
+
+  if (url.pathname === '/api/pairing' && request.method === 'GET') {
+    const user = await requireSession(request, env);
+    const token = await ensurePairingToken(env, user.id);
+    return json({ token });
+  }
+
+  if (url.pathname === '/api/pairing/reset' && request.method === 'POST') {
+    assertSameOrigin(request);
+    const user = await requireSession(request, env);
+    const token = await resetPairingToken(env, user.id);
+    return json({ token });
   }
 
   if (url.pathname === '/api/devices' && request.method === 'GET') {

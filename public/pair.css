@@ -1,0 +1,41 @@
+.pair-page { max-width: 760px; }
+.pair-card { padding: 22px; }
+.pair-title { display: grid; gap: 6px; margin-bottom: 18px; }
+.pair-title p { color: var(--muted); }
+.pair-status { display: flex; align-items: center; gap: 8px; margin: 14px 0; }
+.pair-status .badge { text-transform: none; letter-spacing: 0; font-size: 12px; }
+.pair-actions { display: grid; gap: 10px; margin-top: 14px; }
+.pair-actions .btn, .pair-actions a.btn { text-align: center; text-decoration: none; display: block; }
+.pair-actions .btn:hover, .pair-actions a.btn:hover { text-decoration: none; }
+.step {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(15, 13, 10, .55);
+}
+.step + .step { margin-top: 10px; }
+.step-num {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(240, 201, 106, .4);
+  border-radius: 50%;
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 800;
+}
+.step h3 { margin: 0 0 3px; }
+.step p { color: var(--muted); font-size: 13px; }
+.step .row { margin-top: 9px; }
+.step-muted { opacity: .55; }
+.pair-foot { margin-top: 18px; color: var(--muted); font-size: 12px; }
+.pair-note { margin-top: 14px; }
+@media (max-width: 520px) {
+  .pair-card { padding: 16px; }
+  .step { grid-template-columns: 30px 1fr; padding: 12px; }
+  .step-num { width: 26px; height: 26px; }
+}

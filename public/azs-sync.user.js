@@ -188,6 +188,7 @@
     const headers = {};
     if (hasBody) headers['content-type'] = 'application/json';
     if (config.token) headers.authorization = `Bearer ${config.token}`;
+    if (config.name) headers['x-azs-device'] = config.name;
     const response = await fetch(config.api.replace(/\/+$/, '') + path, {
       method: options.method || 'GET',
       headers,

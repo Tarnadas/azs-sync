@@ -106,8 +106,8 @@ p { margin: 0; }
 .grow { flex: 1; min-width: 180px; }
 .divider { border: 0; border-top: 1px solid var(--line); margin: 4px 0; width: 100%; }
 .divider-line { border-top: 1px solid var(--line); margin: 14px 0 4px; width: 100%; }
-.qr-wrap { display: grid; place-items: center; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
-.qr { display: block; width: min(260px, 72vw); height: auto; image-rendering: pixelated; }
+.qr-wrap { display: grid; place-items: center; width: fit-content; max-width: 100%; margin: 0 auto; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.qr { display: block; width: min(280px, 72vw); height: auto; image-rendering: pixelated; }
 .turnstile { display: flex; justify-content: center; min-height: 65px; }
 .stack-lg { display: grid; gap: 22px; }
 .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

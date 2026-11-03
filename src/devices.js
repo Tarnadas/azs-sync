@@ -37,13 +37,38 @@ export async function authenticateDevice(request, env, { touch = true } = {}) {
   )
     .bind(tokenHash)
     .first();
-  if (!device) throw new HttpError(401, 'unknown or revoked device token');
-  if (touch) {
-    await env.DB.prepare('UPDATE devices SET last_seen_at = ? WHERE id = ?')
-      .bind(Date.now(), device.id)
-      .run();
+
+  if (device) {
+    if (touch) {
+      await env.DB.prepare('UPDATE devices SET last_seen_at = ? WHERE id = ?')
+        .bind(Date.now(), device.id)
+        .run();
+    }
+    return device;
   }
-  return device;
+
+  // Account-level pairing token: every account has one, so the dashboard can
+  // always show a QR without creating device rows. The userscript sends its
+  // own label for the history.
+  const account = await env.DB.prepare(
+    'SELECT id, name FROM users WHERE pairing_token_hash = ?',
+  )
+    .bind(tokenHash)
+    .first();
+  if (account) {
+    const label = (request.headers.get('x-azs-device') || 'Sync').trim().slice(0, 60) || 'Sync';
+    return {
+      id: null,
+      user_id: account.id,
+      user_name: account.name,
+      name: label,
+      created_at: null,
+      last_seen_at: null,
+      last_version: null,
+    };
+  }
+
+  throw new HttpError(401, 'unknown or revoked device token');
 }
 
 export async function listDevices(env, userId) {
