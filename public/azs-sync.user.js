@@ -217,7 +217,7 @@
     :host {
       all: initial;
       position: fixed;
-      top: 8px;
+      bottom: 8px;
       right: 8px;
       z-index: 2147483647;
       font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -261,7 +261,7 @@
     .panel {
       pointer-events: auto;
       position: absolute;
-      top: 36px;
+      bottom: 36px;
       right: 0;
       width: min(330px, calc(100vw - 20px));
       padding: 14px;

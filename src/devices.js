@@ -9,12 +9,12 @@ export async function createDevice(env, user, name) {
   const id = randomId();
   const now = Date.now();
   await env.DB.prepare(
-    'INSERT INTO devices (id, user_id, name, token_hash, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT INTO devices (id, user_id, name, token, token_hash, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
   )
-    .bind(id, user.id, cleanName, tokenHash, now, null)
+    .bind(id, user.id, cleanName, token, tokenHash, now, null)
     .run();
   return {
-    device: { id, name: cleanName, createdAt: now, lastSeenAt: null },
+    device: { id, name: cleanName, token, createdAt: now, lastSeenAt: null },
     token,
   };
 }
@@ -48,7 +48,7 @@ export async function authenticateDevice(request, env, { touch = true } = {}) {
 
 export async function listDevices(env, userId) {
   const rows = await env.DB.prepare(
-    `SELECT id, name, created_at, last_seen_at, last_version
+    `SELECT id, name, token, created_at, last_seen_at, last_version
        FROM devices
       WHERE user_id = ? AND revoked_at IS NULL
       ORDER BY created_at DESC`,
@@ -62,10 +62,23 @@ export function publicDevice(row) {
   return {
     id: row.id,
     name: row.name,
+    token: row.token || null,
     createdAt: row.created_at,
     lastSeenAt: row.last_seen_at,
     lastVersion: row.last_version,
   };
+}
+
+export async function rotateDeviceToken(env, userId, deviceId) {
+  const token = TOKEN_PREFIX + randomToken(32);
+  const tokenHash = await sha256Hex(token);
+  const result = await env.DB.prepare(
+    'UPDATE devices SET token = ?, token_hash = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL',
+  )
+    .bind(token, tokenHash, deviceId, userId)
+    .run();
+  if (!result.meta?.changes) throw new HttpError(404, 'device not found');
+  return token;
 }
 
 export async function revokeDevice(env, userId, deviceId) {

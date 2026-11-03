@@ -1,3 +1,5 @@
+import qrcode from './vendor/qrcode.mjs';
+
 const app = document.querySelector('#app');
 const toastEl = document.querySelector('#toast');
 
@@ -390,9 +392,10 @@ function renderAuth(error = null) {
         'ol',
         { class: 'steps' },
         h('li', {}, h('strong', {}, 'Create an account '), 'with a passkey.'),
-        h('li', {}, h('strong', {}, 'Create a device '), 'and open its pairing link on the game page.'),
         h('li', {}, h('strong', {}, 'Install the userscript '), 'in the browser you play in.'),
+        h('li', {}, h('strong', {}, 'Scan the QR '), 'or copy the pairing link and open it on the game page.'),
         h('li', {}, h('strong', {}, 'Play normally. '), 'The script compares the sealed save and pushes or pulls when it changes.'),
+        h('li', {}, h('strong', {}, 'Brave Android? '), 'Skip the link and use manual transfer on the dashboard.'),
       ),
       h('div', { class: 'notice' }, h('p', {}, 'Importing a save replaces the whole account. This tool never merges two saves; when both devices have new progress it asks which one to keep and stores the other in history.')),
     ),
@@ -489,8 +492,8 @@ function saveCard() {
     return h(
       'section',
       { class: 'card stack' },
-      h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Save'), h('p', { class: 'muted small' }, 'The current sealed account on this sync service.'))),
-      h('div', { class: 'empty' }, 'No save yet. Pair a device and play a run; the userscript will upload the first save. You can also upload an exported .sav below.'),
+      h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Manual transfer'), h('p', { class: 'muted small' }, 'Upload/download a sealed .sav. No userscript or pairing link needed.'))),
+      h('div', { class: 'empty' }, 'No save yet. Upload an exported .sav below, or pair a device and play a run.'),
       uploadControl(),
       manualNote,
     );
@@ -508,7 +511,7 @@ function saveCard() {
     h(
       'div',
       { class: 'card-head' },
-      h('div', {}, h('h2', {}, 'Save'), h('p', { class: 'muted small' }, 'The current sealed account on this sync service.')),
+      h('div', {}, h('h2', {}, 'Manual transfer'), h('p', { class: 'muted small' }, 'The current sealed account. Upload/download a .sav for Brave Android or any browser without the userscript.')),
       h('span', { class: 'badge gold' }, `v${save.version}`),
     ),
     h(
@@ -525,7 +528,79 @@ function saveCard() {
   );
 }
 
+function pairingLinkFor(device) {
+  if (!device?.token) return null;
+  return `https://wow.aethus.pl/#azs-pair=${b64urlEncodeText(JSON.stringify({
+    a: location.origin,
+    t: device.token,
+    n: device.name,
+  }))}`;
+}
+
+function qrDataUrl(link) {
+  try {
+    const qr = qrcode(0, 'M');
+    qr.addData(link);
+    qr.make();
+    return qr.createDataURL(4, 4);
+  } catch {
+    return null;
+  }
+}
+
+function showQrModal(device) {
+  const link = pairingLinkFor(device);
+  if (!link) {
+    toast('Generate a pairing link first.', true);
+    return;
+  }
+  const qr = qrDataUrl(link);
+  const linkInput = h('input', { class: 'input mono', readonly: true, value: link, spellcheck: 'false' });
+  const copy = h('button', { class: 'btn' }, 'Copy pairing link');
+  copy.addEventListener('click', () => copyText(link, 'Pairing link copied'));
+  const open = h('a', { class: 'btn btn-primary', href: link, target: '_blank', rel: 'noopener' }, 'Open game & pair');
+  const done = h('button', { class: 'btn' }, 'Done');
+  const backdrop = h('div', { class: 'modal-backdrop' });
+  const modal = h(
+    'div',
+    { class: 'modal stack' },
+    h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, `Pair ${device.name}`), h('p', { class: 'muted small' }, 'Scan the code with your phone, or copy the link into the browser that has the userscript.'))),
+    qr
+      ? h('div', { class: 'qr-wrap' }, h('img', { class: 'qr', src: qr, alt: 'Pairing QR code', width: '260', height: '260' }))
+      : h('div', { class: 'notice error' }, h('p', {}, 'Could not draw the QR code. Copy the link below instead.')),
+    h('div', { class: 'field' }, h('label', {}, 'Pairing link'), h('div', { class: 'token-value' }, linkInput, copy)),
+    h('div', { class: 'notice' }, h('p', {}, 'On Android, open this link in Vivaldi with Tampermonkey (or another extension-capable Chromium), not Brave. If scanning opens Brave, copy the link and paste it into Vivaldi.')),
+    h('div', { class: 'row' }, open, done),
+  );
+  done.addEventListener('click', () => backdrop.remove());
+  backdrop.append(modal);
+  document.body.append(backdrop);
+}
+
+async function newPairingLink(device) {
+  try {
+    const result = await api(`/api/devices/${encodeURIComponent(device.id)}/token`, { method: 'POST' });
+    device.token = result.token;
+    toast('New pairing link generated');
+    await loadDashboard();
+    showQrModal({ ...device, token: result.token });
+  } catch (error) {
+    displayError(error);
+  }
+}
+
 function deviceItem(device) {
+  const link = pairingLinkFor(device);
+  const showQr = h('button', { class: 'btn btn-sm' }, link ? 'Show QR' : 'Generate link');
+  showQr.addEventListener('click', () => {
+    if (link) showQrModal(device);
+    else newPairingLink(device);
+  });
+
+  const copy = h('button', { class: 'btn btn-sm' }, 'Copy link');
+  copy.disabled = !link;
+  copy.addEventListener('click', () => copyText(pairingLinkFor(device), 'Pairing link copied'));
+
   const revoke = h('button', { class: 'btn btn-danger btn-sm' }, 'Revoke');
   revoke.addEventListener('click', async () => {
     if (!confirm(`Revoke "${device.name}"? Its userscript will stop syncing.`)) return;
@@ -539,6 +614,7 @@ function deviceItem(device) {
       revoke.disabled = false;
     }
   });
+
   return h(
     'div',
     { class: 'item' },
@@ -548,67 +624,82 @@ function deviceItem(device) {
       h('span', { class: 'item-title' }, device.name),
       h('span', { class: 'item-sub' }, `Created ${fmtDate(device.createdAt)} · last seen ${fmtDate(device.lastSeenAt)}${device.lastVersion ? ` · v${device.lastVersion}` : ''}`),
     ),
-    h('div', { class: 'item-actions' }, revoke),
+    h('div', { class: 'item-actions' }, showQr, copy, revoke),
   );
 }
 
-function showDeviceModal(created) {
-  const payload = {
-    a: location.origin,
-    t: created.token,
-    n: created.device.name,
-  };
-  const pairingLink = `https://wow.aethus.pl/#azs-pair=${b64urlEncodeText(JSON.stringify(payload))}`;
+function pairingCard() {
+  const sorted = [...state.devices].sort((a, b) => a.createdAt - b.createdAt);
+  const primary = sorted.find((device) => device.token) || sorted[0] || null;
+  const primaryLink = pairingLinkFor(primary);
+  const linkInput = h('input', {
+    class: 'input mono',
+    readonly: true,
+    value: primaryLink || 'No pairing link yet',
+    spellcheck: 'false',
+  });
+  const copy = h('button', { class: 'btn' }, 'Copy pairing link');
+  copy.disabled = !primaryLink;
+  copy.addEventListener('click', () => copyText(primaryLink, 'Pairing link copied'));
 
-  const tokenInput = h('input', { class: 'input mono', readonly: true, value: created.token, spellcheck: 'false' });
-  const linkInput = h('input', { class: 'input mono', readonly: true, value: pairingLink, spellcheck: 'false' });
+  const showQr = h('button', { class: 'btn btn-primary' }, 'Show QR');
+  showQr.disabled = !primaryLink;
+  showQr.addEventListener('click', () => {
+    if (primaryLink) showQrModal(primary);
+    else if (primary) newPairingLink(primary);
+  });
 
-  const copyToken = h('button', { class: 'btn btn-sm' }, 'Copy token');
-  copyToken.addEventListener('click', () => copyText(created.token, 'Device token copied'));
-  const copyLink = h('button', { class: 'btn btn-sm' }, 'Copy pairing link');
-  copyLink.addEventListener('click', () => copyText(pairingLink, 'Pairing link copied'));
+  const open = h('a', { class: 'btn', href: primaryLink || '#', target: '_blank', rel: 'noopener' }, 'Open game & pair');
+  if (!primaryLink) open.setAttribute('aria-disabled', 'true');
+  open.addEventListener('click', (event) => {
+    if (!primaryLink) {
+      event.preventDefault();
+      toast('Generate a pairing link first.', true);
+    }
+  });
 
   const install = h('a', { class: 'btn btn-sm', href: '/azs-sync.user.js', target: '_blank', rel: 'noopener' }, 'Install userscript');
-  const open = h('a', { class: 'btn btn-primary btn-sm', href: pairingLink, target: '_blank', rel: 'noopener' }, 'Open game & pair');
-  const done = h('button', { class: 'btn' }, 'Done');
 
-  const backdrop = h('div', { class: 'modal-backdrop' });
-  const modal = h(
-    'div',
-    { class: 'modal stack' },
-    h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Device created'), h('p', { class: 'muted small' }, 'The token is shown once. Copy it or open the pairing link now.'))),
-    h(
-      'div',
-      { class: 'token-box' },
-      h('div', { class: 'field' }, h('label', {}, 'Device token'), h('div', { class: 'token-value' }, tokenInput, copyToken)),
-      h('div', { class: 'field' }, h('label', {}, 'Pairing link (opens the game and configures the userscript)'), h('div', { class: 'token-value' }, linkInput, copyLink)),
-      h('div', { class: 'row' }, install, open),
-    ),
-    h('div', { class: 'notice' }, h('p', {}, 'Install Tampermonkey first. On Android, use Vivaldi 8.2+ (or another Chromium browser with extension support); Brave for Android does not support extensions yet.')),
-    h('div', { class: 'row' }, done),
-  );
-  done.addEventListener('click', () => {
-    backdrop.remove();
-    loadDashboard().catch(displayError);
+  const addName = h('input', {
+    class: 'input',
+    type: 'text',
+    maxlength: '60',
+    placeholder: 'Device name',
+    value: /Android|iPhone|iPad/i.test(navigator.userAgent) ? 'Phone' : 'Desktop',
   });
-  backdrop.append(modal);
-  document.body.append(backdrop);
-}
+  const add = h('button', { class: 'btn' }, 'Add device');
+  add.addEventListener('click', async () => {
+    add.disabled = true;
+    try {
+      await api('/api/devices', { method: 'POST', body: { name: addName.value.trim() || 'Device' } });
+      toast('Device added');
+      await loadDashboard();
+    } catch (error) {
+      displayError(error);
+    } finally {
+      add.disabled = false;
+    }
+  });
 
-function installCard() {
   return h(
     'section',
     { class: 'card stack' },
-    h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Install the userscript'), h('p', { class: 'muted small' }, 'Desktop: Brave, Chrome, or Edge with Tampermonkey. Android: Vivaldi 8.2+ with Tampermonkey.'))),
-    h(
-      'ol',
-      { class: 'steps' },
-      h('li', {}, 'Install ', h('strong', {}, 'Tampermonkey'), ' in the browser you play in.'),
-      h('li', {}, 'Click ', h('a', { href: '/azs-sync.user.js', target: '_blank', rel: 'noopener' }, 'azs-sync.user.js'), ' and confirm the install.'),
-      h('li', {}, 'Create a device above, then open its ', h('strong', {}, 'pairing link'), ' on the game page.'),
-      h('li', {}, 'The script syncs on load and after each save. The small AZS pill in the corner shows its state.'),
-    ),
-    h('div', { class: 'notice' }, h('p', {}, 'On Android, Vivaldi can install Chrome Web Store extensions. Enable “Desktop site” if the store asks. The game needs WebGPU: Android 12+ with a current Chromium build.')),
+    h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Automatic sync'), h('p', { class: 'muted small' }, 'Pair a phone or another computer with the userscript. Optional — Brave on Android can use manual transfer below.'))),
+    primary
+      ? h(
+          'div',
+          { class: 'stack' },
+          h('div', { class: 'field' }, h('label', {}, `Pairing link for ${primary.name}`), h('div', { class: 'token-value' }, linkInput, copy)),
+          h('div', { class: 'row' }, showQr, open, install),
+        )
+      : h('div', { class: 'empty' }, 'No pairing link yet. Add a device below.'),
+    h('div', { class: 'divider-line' }),
+    h('h3', {}, 'Paired devices'),
+    state.devices.length
+      ? h('div', { class: 'list' }, ...state.devices.map(deviceItem))
+      : h('div', { class: 'empty' }, 'No devices yet.'),
+    h('div', { class: 'row' }, h('div', { class: 'grow' }, addName), add),
+    h('div', { class: 'notice' }, h('p', {}, 'Desktop: install Tampermonkey, then open the pairing link or click Install userscript. Android auto-sync: install Tampermonkey in Vivaldi 8.2+; a QR scan may open Brave, so use Copy pairing link and paste it into Vivaldi.')),
   );
 }
 
@@ -663,39 +754,6 @@ function historyCard() {
   );
 }
 
-function createDeviceCard() {
-  const name = h('input', {
-    class: 'input',
-    type: 'text',
-    maxlength: '60',
-    placeholder: 'Device name',
-    value: /Android|iPhone|iPad/i.test(navigator.userAgent) ? 'Phone' : 'Desktop',
-  });
-  const create = h('button', { class: 'btn btn-primary' }, 'Create device');
-  create.addEventListener('click', async () => {
-    create.disabled = true;
-    try {
-      const created = await api('/api/devices', {
-        method: 'POST',
-        body: { name: name.value.trim() || 'Device' },
-      });
-      showDeviceModal(created);
-    } catch (error) {
-      displayError(error);
-    } finally {
-      create.disabled = false;
-    }
-  });
-
-  return h(
-    'section',
-    { class: 'card stack' },
-    h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Devices'), h('p', { class: 'muted small' }, 'Each browser install gets its own token. Revoke one without touching the others.'))),
-    h('div', { class: 'row' }, h('div', { class: 'grow' }, name), create),
-    state.devices.length ? h('div', { class: 'list' }, ...state.devices.map(deviceItem)) : h('div', { class: 'empty' }, 'No devices yet. Create one above.'),
-  );
-}
-
 function dashboardHeader() {
   const addPasskey = h('button', { class: 'btn btn-sm' }, 'Add passkey');
   addPasskey.addEventListener('click', async () => {
@@ -737,12 +795,23 @@ function dashboardHeader() {
 }
 
 async function loadDashboard() {
-  const [devices, history, save] = await Promise.all([
-    api('/api/devices'),
-    api('/api/history'),
-    api('/api/save'),
-  ]);
+  let devices = await api('/api/devices');
   state.devices = devices.items || [];
+
+  // A passkey login alone has no sync token. Create a default phone pairing
+  // link on the first dashboard load so there is always something to copy or
+  // scan. The token is stored so it can be shown again later.
+  if (state.devices.length === 0) {
+    try {
+      await api('/api/devices', { method: 'POST', body: { name: 'Phone' } });
+      devices = await api('/api/devices');
+      state.devices = devices.items || [];
+    } catch (error) {
+      toast('Could not create a pairing link automatically. Use Add device.', true);
+    }
+  }
+
+  const [history, save] = await Promise.all([api('/api/history'), api('/api/save')]);
   state.history = history.items || [];
   state.save = save;
   renderDashboard();
@@ -750,16 +819,24 @@ async function loadDashboard() {
 
 function renderDashboard() {
   clear(app);
-  app.append(
-    h(
-      'div',
-      { class: 'stack-lg' },
-      dashboardHeader(),
-      saveCard(),
-      h('div', { class: 'grid' }, createDeviceCard(), installCard()),
-      historyCard(),
-    ),
+  const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+  const stack = h(
+    'div',
+    { class: 'stack-lg' },
+    dashboardHeader(),
   );
+  if (isLocal) {
+    stack.append(
+      h(
+        'div',
+        { class: 'notice error' },
+        h('p', {}, h('strong', {}, 'This dashboard is running on localhost. '), 'A phone cannot reach it. Deploy the Worker and use the deployed URL before pairing a phone or using manual transfer on another device.'),
+        h('p', {}, 'A passkey created on localhost is bound to localhost; create the account again on the deployed URL.'),
+      ),
+    );
+  }
+  stack.append(pairingCard(), saveCard(), historyCard());
+  app.append(stack);
 }
 
 async function init() {

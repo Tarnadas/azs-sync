@@ -15,7 +15,7 @@ The game has no login. It keeps the whole account in `localStorage['rogue.charac
 [Vivaldi Android + Tampermonkey] ─┐
                                   ├─ HTTPS ─> [Cloudflare Worker + D1]
 [Brave desktop + Tampermonkey] ───┘             ├─ passkey dashboard
-                                                ├─ device tokens (hashed)
+                                                ├─ copyable pairing links / QR
                                                 └─ sealed save history
 ```
 
@@ -72,6 +72,8 @@ npm run dev
 
 The example `.dev.vars` includes `RECOVERY_TOKEN=dev-recovery-token`, so you can sign in locally without a platform authenticator. Do not deploy with that token.
 
+**Localhost is same-machine only.** A phone cannot reach `http://localhost:8787`, and a pairing link generated there embeds localhost. Deploy the Worker before pairing a phone or using manual transfer on another device. A passkey made on localhost is also bound to localhost.
+
 ```bash
 npm test
 ```
@@ -81,16 +83,16 @@ npm test
 1. Open the dashboard in the browser you will play in (or on your desktop) and sign in.
 2. Install **Tampermonkey** in that browser.
 3. On the dashboard, click **Install userscript** and confirm the install.
-4. In the dashboard, create a device (for example “Desktop” or “Phone”).
-5. Open the device's **pairing link** on the game page. It looks like:
+4. The dashboard creates a **Phone** pairing device on the first dashboard load. Its **pairing link** is always visible and copyable. You can also click **Show QR** to scan it from a phone.
+5. Open the pairing link on the game page. It looks like:
 
    ```
    https://wow.aethus.pl/#azs-pair=<base64url JSON>
    ```
 
-   The userscript reads the fragment, stores the server URL + device token in the game's localStorage, clears the fragment, and starts syncing. The token is shown only once.
+   The userscript reads the fragment, stores the server URL + device token in the game's localStorage, clears the fragment, and starts syncing. The link is stored on the server, so you can copy it again later; use **Add device** for a separate desktop/phone link.
 
-6. Play. The small **AZS** pill in the corner shows the state:
+6. Play. The small **AZS** pill in the bottom-right corner shows the state:
    - `AZS synced` — up to date
    - `AZS newer` — the server has a newer save; open the pill and choose **Sync now**
    - `AZS conflict` — both sides changed; choose one
@@ -111,8 +113,9 @@ This is more taps than the userscript, but it uses no browser extensions and kee
 
 - Install **Vivaldi** from the Play Store.
 - Open the Chrome Web Store in Vivaldi, enable **Desktop site** if needed, and install **Tampermonkey**.
-- Install the userscript from your dashboard, then use the pairing link.
+- Install the userscript from your dashboard, then open the pairing link or scan its QR from the desktop dashboard.
 - Keep Brave as your normal browser; use Vivaldi only for the game if you prefer. Alternatively, use the dashboard's **manual mode** in Brave (upload/download a `.sav` around each session) without installing anything.
+- A QR scan may open your default browser. If that is Brave, use **Copy pairing link** on the dashboard and paste the link into Vivaldi instead.
 - When Brave Android ships extension support, the same userscript can be installed there. As of November 2026 it is behind `brave://flags/#brave-android-extensions` and the phone UI is not finished.
 - If the game does not boot in Vivaldi, check `navigator.gpu` / open a WebGPU demo. If WebGPU is unavailable, try Lemur or Quetta; if the device cannot do WebGPU, no browser will run this game.
 
@@ -152,6 +155,7 @@ Device endpoints use `Authorization: Bearer azs_…`.
 | POST | `/api/auth/logout` | session | sign out |
 | GET/POST | `/api/devices` | session | list/create devices |
 | DELETE | `/api/devices/:id` | session | revoke a device |
+| POST | `/api/devices/:id/token` | session | rotate/generate the pairing link |
 | GET | `/api/state` | session/device | current save |
 | POST | `/api/sync` | device | push with `baseVersion` |
 | POST | `/api/force` | device | user-confirmed overwrite |
@@ -167,7 +171,7 @@ CORS is restricted to `https://wow.aethus.pl` so the userscript can call the API
 ## Security and privacy
 
 - The save is never decrypted. The server only sees the sealed `RSE1:` text.
-- Device tokens are random 32-byte values, stored only as SHA-256 hashes. The raw token exists in the browser's localStorage and in the one-time pairing link fragment. The fragment is not sent to the server.
+- Device tokens are random 32-byte values. Each token is stored in D1 in a recoverable form so the dashboard can show its pairing link again; authentication checks a SHA-256 hash. The raw token also exists in the browser's localStorage and in the pairing link fragment (the fragment is not sent to the server). Treat database access as equivalent to save access.
 - Passkeys are verified with `@simplewebauthn/server`; challenges are single-use, expire after five minutes, and travel in an HttpOnly cookie.
 - Dashboard sessions are HMAC-signed, HttpOnly, SameSite=Lax cookies; `SESSION_SECRET` is required.
 - Every account created through the dashboard gets a random **recovery code**, stored only as a SHA-256 hash. It is shown once and can sign in / add a passkey on another device. Store it like a password.
@@ -194,10 +198,13 @@ src/saves.js       optimistic save sync + history
 src/sync.js        pure sync decision + validation
 src/util.js        base64url, cookies, JSON helpers
 public/            dashboard + Tampermonkey userscript
-migrations/        D1 schema
+public/vendor/     qrcode-generator (MIT) for the pairing QR
+migrations/        D1 schema (0001 initial, 0002 stored pairing tokens)
 test/              node:test unit tests
 ```
 
 ## License
 
 MIT
+
+The QR renderer in `public/vendor/qrcode.mjs` is [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) by Kazuhiko Arase, also MIT.

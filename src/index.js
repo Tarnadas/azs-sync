@@ -10,7 +10,13 @@ import {
   requireSession,
   sessionUser,
 } from './auth.js';
-import { authenticateDevice, createDevice, listDevices, revokeDevice } from './devices.js';
+import {
+  authenticateDevice,
+  createDevice,
+  listDevices,
+  revokeDevice,
+  rotateDeviceToken,
+} from './devices.js';
 import { archiveSave, getHistoryItem, getState, listHistory, pushSave } from './saves.js';
 import {
   HttpError,
@@ -152,6 +158,14 @@ async function handleAccount(request, env, url) {
     const user = await requireSession(request, env);
     await revokeDevice(env, user.id, revoke[1]);
     return json({ ok: true });
+  }
+
+  const rotate = /^\/api\/devices\/([a-f0-9-]+)\/token$/i.exec(url.pathname);
+  if (rotate && request.method === 'POST') {
+    assertSameOrigin(request);
+    const user = await requireSession(request, env);
+    const token = await rotateDeviceToken(env, user.id, rotate[1]);
+    return json({ token });
   }
 
   if (url.pathname === '/api/save' && request.method === 'GET') {

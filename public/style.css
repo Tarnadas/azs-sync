@@ -105,6 +105,9 @@ p { margin: 0; }
 .stack { display: grid; gap: 14px; }
 .grow { flex: 1; min-width: 180px; }
 .divider { border: 0; border-top: 1px solid var(--line); margin: 4px 0; width: 100%; }
+.divider-line { border-top: 1px solid var(--line); margin: 14px 0 4px; width: 100%; }
+.qr-wrap { display: grid; place-items: center; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.qr { display: block; width: min(260px, 72vw); height: auto; image-rendering: pixelated; }
 .stack-lg { display: grid; gap: 22px; }
 .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .row-between { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
