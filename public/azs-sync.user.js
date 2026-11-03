@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Azeroth Survivors Sync
 // @namespace    https://github.com/azs-sync
-// @version      0.1.0
+// @version      0.1.1
 // @description  Two-way sync for the sealed Azeroth Survivors browser save.
 // @match        https://wow.aethus.pl/*
 // @run-at       document-start
@@ -12,7 +12,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '0.1.0';
+  const VERSION = '0.1.1';
   const SAVE_KEY = 'rogue.characters';
   const BACKUP_KEY = 'rogue.characters.backup.1';
   const CONFIG_KEY = 'azs.sync.config';
@@ -422,6 +422,8 @@
           <button id="open-dashboard" type="button">Dashboard</button>
           <button id="settings" type="button">Settings</button>
           <button class="danger" id="unpair" type="button">Unpair</button>
+          <button id="download-local" type="button">Local .sav</button>
+          <button id="download-backup" type="button">Backup .sav</button>
         </div>
         <div class="foot">v${VERSION} · sealed save only</div>
       </div>
@@ -468,6 +470,29 @@
         /* ignore */
       }
       location.reload();
+    });
+    shadow.querySelector('#download-local').addEventListener('click', () => {
+      const save = getSave();
+      if (!save) {
+        setStatus('No local save to download', 'warn');
+        return;
+      }
+      downloadSave(`AzerothSurvivors-local-${fileStamp()}.sav`, save);
+      setStatus('Local save downloaded', 'ok');
+    });
+    shadow.querySelector('#download-backup').addEventListener('click', () => {
+      let backup = null;
+      try {
+        backup = localStorage.getItem(BACKUP_KEY);
+      } catch {
+        /* ignore */
+      }
+      if (!backup) {
+        setStatus('No local backup yet', 'warn');
+        return;
+      }
+      downloadSave(`AzerothSurvivors-backup-${fileStamp()}.sav`, backup);
+      setStatus('Local backup downloaded', 'ok');
     });
 
     setStatus(statusText, statusTone);
@@ -536,6 +561,10 @@
     });
     modal.append(backdrop);
     modal.hidden = false;
+  }
+
+  function fileStamp() {
+    return new Date().toISOString().replace(/[:.]/g, '-');
   }
 
   function downloadSave(name, text) {
