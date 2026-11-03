@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>Azeroth Survivors Sync</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="Azeroth Survivors Sync home">
+      <span class="brand-mark" aria-hidden="true">AZ</span>
+      <span>Azeroth Survivors <strong>Sync</strong></span>
+    </a>
+    <a class="header-link" href="https://wow.aethus.pl/" target="_blank" rel="noopener">Open game ↗</a>
+  </header>
+
+  <main id="app" class="page">
+    <p class="muted">Loading…</p>
+  </main>
+
+  <footer class="site-footer">
+    <span>Your save stays sealed. This service never decrypts it.</span>
+    <a href="/azs-sync.user.js">Userscript</a>
+  </footer>
+
+  <noscript><p class="page">This dashboard needs JavaScript.</p></noscript>
+  <div id="toast" class="toast" hidden></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

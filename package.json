@@ -1,0 +1,31 @@
+{
+  "name": "azs-sync",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Passkey-protected cloud sync for Azeroth Survivors browser saves",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply azs-sync --local",
+    "db:migrate:remote": "wrangler d1 migrations apply azs-sync --remote",
+    "test": "node --test"
+  },
+  "keywords": [
+    "azeroth-survivors",
+    "cloud-save",
+    "webauthn",
+    "passkey"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@simplewebauthn/server": "^14.0.3"
+  },
+  "devDependencies": {
+    "wrangler": "^4.156.2"
+  }
+}

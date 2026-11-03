@@ -1,0 +1,8 @@
+# Copy to .dev.vars for local development. Generate real values for production.
+#
+# SESSION_SECRET signs the dashboard session cookie. Required.
+SESSION_SECRET=dev-only-session-secret-change-me
+#
+# Optional password fallback for the dashboard. If set, the dashboard shows a
+# "Recovery token" form. Leave unset in production unless you want a fallback.
+RECOVERY_TOKEN=dev-recovery-token
