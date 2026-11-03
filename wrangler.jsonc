@@ -15,7 +15,7 @@
     {
       "binding": "DB",
       "database_name": "azs-sync",
-      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID",
+      "database_id": "79a3b72f-1d16-4aff-a47d-d0e33a0431b6",
       "migrations_dir": "migrations"
     }
   ]
