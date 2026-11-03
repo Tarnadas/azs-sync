@@ -104,7 +104,7 @@ npm test
 1. Open the dashboard in the browser you will play in (or on your desktop) and sign in.
 2. Install **Tampermonkey** in that browser.
 3. On the dashboard, click **Install userscript** and confirm the install.
-4. The dashboard creates a **Phone** pairing device on the first dashboard load. Its **pairing link** is always visible and copyable. You can also click **Show QR** to scan it from a phone.
+4. If you want automatic sync, click **Create pairing link** (or **Add device** for a custom name). Nothing is created just by logging in. The pairing link is stored and copyable; **Show QR** displays it for scanning.
 5. Open the pairing link on the game page. It looks like:
 
    ```

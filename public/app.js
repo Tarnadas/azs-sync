@@ -451,7 +451,7 @@ function howItWorksCard() {
       h('li', {}, h('strong', {}, 'Create an account '), 'with a passkey.'),
       h('li', {}, h('strong', {}, 'Optional: '), 'click Recovery code on the dashboard if you want a fallback for a device without your passkey.'),
       h('li', {}, h('strong', {}, 'Install the userscript '), 'in the browser you play in.'),
-      h('li', {}, h('strong', {}, 'Scan the QR '), 'or copy your pairing link and open it on the game page.'),
+      h('li', {}, h('strong', {}, 'When you want automatic sync, '), 'click Create pairing link, then open it or scan its QR on the game page.'),
       h('li', {}, h('strong', {}, 'Play normally. '), 'The script compares the sealed save and pushes or pulls when it changes.'),
       h('li', {}, h('strong', {}, 'Brave Android? '), 'Skip the link and use manual transfer on the dashboard.'),
     ),
@@ -737,6 +737,20 @@ function pairingCard() {
 
   const install = h('a', { class: 'btn btn-sm', href: '/azs-sync.user.js', target: '_blank', rel: 'noopener' }, 'Install userscript');
 
+  const createLink = h('button', { class: 'btn btn-primary' }, 'Create pairing link');
+  createLink.addEventListener('click', async () => {
+    createLink.disabled = true;
+    try {
+      await api('/api/devices', { method: 'POST', body: { name: 'Phone' } });
+      toast('Pairing link created');
+      await loadDashboard();
+    } catch (error) {
+      displayError(error);
+    } finally {
+      createLink.disabled = false;
+    }
+  });
+
   const addName = h('input', {
     class: 'input',
     type: 'text',
@@ -769,7 +783,12 @@ function pairingCard() {
           h('div', { class: 'field' }, h('label', {}, `Pairing link for ${primary.name}`), h('div', { class: 'token-value' }, linkInput, copy)),
           h('div', { class: 'row' }, showQr, open, install),
         )
-      : h('div', { class: 'empty' }, 'No pairing link yet. Add a device below.'),
+      : h(
+          'div',
+          { class: 'stack' },
+          h('div', { class: 'empty' }, 'No pairing link yet. Create one only when you want to pair the userscript.'),
+          createLink,
+        ),
     h('div', { class: 'divider-line' }),
     h('h3', {}, 'Paired devices'),
     state.devices.length
@@ -886,23 +905,12 @@ function dashboardHeader() {
 }
 
 async function loadDashboard() {
-  let devices = await api('/api/devices');
+  const [devices, history, save] = await Promise.all([
+    api('/api/devices'),
+    api('/api/history'),
+    api('/api/save'),
+  ]);
   state.devices = devices.items || [];
-
-  // A passkey login alone has no sync token. Create a default phone pairing
-  // link on the first dashboard load so there is always something to copy or
-  // scan. The token is stored so it can be shown again later.
-  if (state.devices.length === 0) {
-    try {
-      await api('/api/devices', { method: 'POST', body: { name: 'Phone' } });
-      devices = await api('/api/devices');
-      state.devices = devices.items || [];
-    } catch (error) {
-      toast('Could not create a pairing link automatically. Use Add device.', true);
-    }
-  }
-
-  const [history, save] = await Promise.all([api('/api/history'), api('/api/save')]);
   state.history = history.items || [];
   state.save = save;
   renderDashboard();
