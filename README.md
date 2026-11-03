@@ -1,56 +1,115 @@
 # AZS Sync
 
-Passkey-protected cloud sync for the sealed browser save of **Azeroth Survivors** (`https://wow.aethus.pl/`).
+Cloud sync for **Azeroth Survivors** browser saves (`https://wow.aethus.pl/`).
 
-The game has no login. It keeps the whole account in `localStorage['rogue.characters']` as a sealed `RSE1:` blob, and imports replace the whole account. This project copies that blob between browsers without decrypting or re-sealing it.
+The game has no login. It keeps your whole account in the browser as a sealed `RSE1:` save, and importing a save replaces the whole account. AZS Sync copies that sealed file between browsers without decrypting or modifying it.
 
-**TL;DR:** deploy the Worker, create an account on desktop with a passkey, scan the dashboard QR with your phone, and follow the setup page. The phone needs **no passkey and no dashboard login**; it can either install the userscript (Vivaldi/Tampermonkey) or use the token-authorized manual `.sav` transfer directly from the QR page.
+## Use the hosted instance
 
-## What it does
+**https://azs-sync.shrm.workers.dev**
 
-- A **multi-user Cloudflare Worker + D1** service stores each account's current sealed save, its SHA-256 hash, version, and last 50 versions.
-- A **passkey dashboard** (WebAuthn) lets anyone create an account; every account has its own account-level pairing QR, save, and history. Recovery codes are optional.
-- Per-IP rate limits protect account creation/recovery; Cloudflare Turnstile can be layered on top.
-- A **Tampermonkey userscript** runs on `https://wow.aethus.pl/*`, reads/writes the game's own `localStorage`, and pushes or pulls automatically.
-- **No merge.** The game cannot merge two accounts. If both devices changed since the last sync, the userscript asks which one to keep and archives the other in history.
+You can use this instance. There is no invite and no operator approval: create an account with a passkey and start syncing. Each account is isolated; your save, pairing QR, and history are only yours.
 
-```
+### Quick start
+
+1. Open the hosted instance on your desktop.
+2. Click **Create an account**, complete the Turnstile check, and create a passkey.
+3. The dashboard immediately shows a **Sync to your phone** QR. There is no “create device” step.
+4. Scan the QR with your phone camera.
+5. Follow the setup page:
+   - **Vivaldi on Android:** install Tampermonkey, install the userscript, tap **Open game & pair**. Automatic sync.
+   - **Brave or another Android browser:** use **Manual transfer** on the setup page. No passkey and no dashboard login are needed on the phone.
+6. Play. The small **AZS** pill in the bottom-right of the game shows sync status.
+
+The dashboard also has a copyable **Game pair link** if you want to paste the direct game URL instead of scanning.
+
+### What the phone needs
+
+The phone **does not need a passkey, recovery code, or dashboard login** for either path. The QR contains an account pairing key; the setup page uses it for automatic sync and for token-authorized `.sav` upload/download.
+
+- **Automatic:** Vivaldi 8.2+ with Tampermonkey. The game needs WebGPU (Android 12+ with a supported GPU).
+- **Manual:** works in Brave for Android today. Export a `.sav` from the game, upload it on the setup page, then download/import on the other device. The setup page is the QR page; no login.
+
+The passkey is only for the **desktop dashboard**, where you manage the QR and optional recovery code.
+
+### Important
+
+- **No merge.** Importing replaces the whole account. If two devices both changed, the userscript asks which save to keep and archives the other in history.
+- **The QR is a key.** Anyone with the QR/setup link can sync or overwrite this account. Treat it like a password. **Reset QR** invalidates old scans and userscripts.
+- **History shows previous versions**, not every sync event. The current save is shown in the Manual transfer card.
+- **Recovery codes are optional.** Signup does not create one. If you want a fallback for a device without your passkey, open the dashboard and click **Recovery code**; it is shown once and replaces any older code.
+- **The AZS userscript** is version 0.1.1; its panel can download the current local save and the pre-pull backup (`rogue.characters.backup.1`).
+- **The game must support WebGPU.** If it does not boot in Vivaldi, try Lemur or Quetta. Brave for Android does not support extensions yet, so it uses manual transfer.
+
+### Troubleshooting
+
+**The QR opened Brave, not Vivaldi.**  
+The setup page detects this and offers **Copy setup link**. Install Vivaldi, paste the link into Vivaldi, or make Vivaldi your default browser and scan again.
+
+**The game does not boot on the phone.**  
+Check WebGPU support. Try a current Vivaldi/Lemur/Quetta on Android 12+ with a supported GPU. The desktop/Windows build is a fallback.
+
+**The pairing link says it was reset or is invalid.**  
+Refresh the dashboard and scan/copy the current QR. **Reset QR** invalidates old links by design.
+
+**The AZS pill says “newer” or “conflict.”**  
+“Newer” means the server has a newer save; open the pill and choose **Sync now**. “Conflict” means both sides changed; choose the save to keep. The other is kept in history.
+
+**History only shows an old “Phone” row.**  
+History lists the version that was replaced, and the device label came from the old pairing flow. Look at the current save in the Manual transfer card; a desktop push becomes the new current version, and the old version appears in history.
+
+**I lost the save on one device.**  
+Export from the game (Options → Saves → Export Save) before making changes. The userscript panel’s **Local .sav** and **Backup .sav** buttons download the browser’s current and pre-pull saves. The dashboard can also upload an exported `.sav`.
+
+---
+
+## For developers
+
+### What this is
+
+- A Cloudflare Worker and D1 database store each account’s sealed save, SHA-256 hash, version, and last 50 replaced versions.
+- Passkey (WebAuthn) accounts; no passwords, no operator-wide login.
+- One account-level pairing key/QR; no per-device list.
+- A Tampermonkey userscript runs on `https://wow.aethus.pl/*` and pushes/pulls automatically.
+- A token-authorized phone setup page (`/pair#t=…`) provides automatic setup instructions and manual upload/download without a dashboard session.
+- Optional recovery codes and optional Cloudflare Turnstile.
+- Per-IP rate limits on account creation, recovery, and passkey login.
+
+```text
 [Vivaldi Android + Tampermonkey] ─┐
                                   ├─ HTTPS ─> [Cloudflare Worker + D1]
-[Brave desktop + Tampermonkey] ───┘             ├─ passkey dashboard
-                                                ├─ account pairing QR
+[Brave desktop + Tampermonkey] ───┘             ├─ passkey dashboard + account QR
+                                                ├─ phone setup / manual page
                                                 └─ sealed save history
 ```
 
-## Requirements
+### Requirements
 
 - Node.js 20+ and npm.
 - A Cloudflare account (free tier is enough).
-- A browser with WebAuthn for the dashboard (any current browser).
-- For automatic phone sync: a Chromium-based Android browser with **Chrome extension support**. **Vivaldi 8.2+** is the recommended one (Chromium 152/156, extensions from the Chrome Web Store). Lemur or Quetta also work. Brave for Android does not support stable extensions yet.
-- The game itself needs **WebGPU**: Android 12+ with a current Chromium build and a supported GPU.
+- A browser with WebAuthn for the dashboard.
+- For automatic phone sync: a Chromium-based Android browser with Chrome extension support. **Vivaldi 8.2+** is recommended; Lemur or Quetta also work. Brave for Android does not support stable extensions yet.
+- The game needs WebGPU: Android 12+ with a current Chromium and supported GPU.
 
-On desktop, Brave/Chrome/Edge with Tampermonkey works today.
-
-## Deploy
+### Deploy your own
 
 ```bash
 npm install
 
-# 1. Create the D1 database and copy its id into wrangler.jsonc.
+# 1. Create the D1 database.
 npx wrangler login
 npx wrangler d1 create azs-sync
 
-# 2. Edit wrangler.jsonc and replace REPLACE_WITH_YOUR_D1_DATABASE_ID.
+# 2. Put the database id into wrangler.jsonc.
 
-# 3. Create the tables.
+# 3. Apply all migrations.
 npm run db:migrate:remote
 
-# 4. Sign the dashboard session cookie.
+# 4. Sign dashboard sessions.
 openssl rand -base64 48 | npx wrangler secret put SESSION_SECRET
 
-# 5. Optional: Cloudflare Turnstile for account creation and recovery.
-#    Create a widget for your Worker domain in the Cloudflare dashboard first.
+# 5. Optional: Turnstile for account creation and recovery.
+#    Create a widget for your Worker hostname in the Cloudflare dashboard.
 # npx wrangler secret put TURNSTILE_SITE_KEY
 # npx wrangler secret put TURNSTILE_SECRET_KEY
 
@@ -58,31 +117,19 @@ openssl rand -base64 48 | npx wrangler secret put SESSION_SECRET
 npm run deploy
 ```
 
-The deployed site is **multi-user**: every visitor can create their own account with a passkey. Each account has its own dashboard, account-level pairing QR, save, and history. There is no create-device step; the QR exists as soon as you sign in.
+Every visitor can create an account. If someone loses their passkey and never created a recovery code, that account cannot be recovered.
 
-**Recovery codes are optional.** By default an account is passkey-only; creating it shows no recovery code. If you want a fallback for a device where your passkey does not sync, open the dashboard and click **Recovery code**. It shows a code once and replaces any earlier code for that account.
+Passkeys are bound to the dashboard origin. If you move the Worker to a custom domain, sign in with the optional recovery code, add a passkey for the new origin, and keep the old one until you are sure.
 
-There is no operator-wide login. If someone loses their passkey and never created a recovery code, that account cannot be recovered.
+### Turnstile and rate limits
 
-Turnstile is optional. If you set both `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`, registration and recovery require the challenge. If you leave them unset, the built-in per-IP rate limits still apply.
+Turnstile is optional. When both `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are set, account creation and recovery require the challenge. Without them, per-IP limits still apply:
 
-To activate Turnstile:
+- 15 account-creation attempts/hour
+- 30 recovery attempts/hour
+- 60 passkey-login attempts/hour
 
-1. Cloudflare dashboard → **Turnstile** → **Add widget**.
-2. Add your Worker hostname, e.g. `azs-sync.<your-subdomain>.workers.dev`.
-3. Copy the site key and secret key.
-4. Set them on the Worker:
-
-   ```bash
-   npx wrangler secret put TURNSTILE_SITE_KEY
-   npx wrangler secret put TURNSTILE_SECRET_KEY
-   ```
-
-Reload the dashboard. The widget appears on account creation and recovery. No redeploy is needed; the Worker reads the secrets from `/api/config`.
-
-The built-in limits (fixed window per IP) are: **15 account-creation attempts/hour**, **30 recovery attempts/hour**, and **60 passkey-login attempts/hour**. Adjust them in `src/index.js` if your community is behind a shared NAT.
-
-> Passkeys are bound to the dashboard origin. If you later move the Worker to a custom domain, sign in with the account recovery code (if you created one), add a passkey for the new origin, and keep the old one until you are sure.
+Adjust the limits in `src/index.js`.
 
 ### Local development
 
@@ -93,148 +140,105 @@ npm run dev
 # http://localhost:8787
 ```
 
-There is no local operator login. Create an account with a passkey, or set Cloudflare's documented Turnstile test keys in `.dev.vars` if you want to exercise the widget locally. The rate limits apply locally too; delete the `rate_limits` table rows to reset them.
+The local instance is **same-machine only**. A phone cannot reach `http://localhost:8787`, and a QR generated there embeds localhost. Deploy before pairing a phone. A passkey made on localhost is bound to localhost.
 
-**Localhost is same-machine only.** A phone cannot reach `http://localhost:8787`, and a QR/setup link generated there embeds localhost. Deploy the Worker before pairing a phone or using manual transfer on another device. A passkey made on localhost is also bound to localhost.
+For local Turnstile UI testing, use Cloudflare’s documented test keys in `.dev.vars`; they always pass and are not protection.
 
 ```bash
 npm test
 ```
 
-## Connect a browser
+### The save flow
 
-1. Open the dashboard on your desktop and sign in.
-2. The **Sync to your phone** card is already there. There is no create-device step. It also has a copyable **Game pair link** if you want to paste the direct game URL instead of scanning.
-3. Scan the QR with your phone camera. It opens a **setup page** (`/pair#t=…`) carrying your account pairing key.
-4. The setup page detects the browser and shows the relevant steps:
-   - **Vivaldi Android:** install Tampermonkey, install the userscript, then open the game.
-   - **Brave/other Android:** install Vivaldi, copy the setup link, and open it in Vivaldi. Or use Manual transfer on the dashboard.
-   - **Desktop:** install Tampermonkey, install the userscript, then open the game.
-5. On Vivaldi, install **Tampermonkey** from the Chrome Web Store (enable “Desktop site” if the store asks), open **Install azs-sync.user.js**, confirm, then tap **Open game & pair**.
-6. Play. The small **AZS** pill in the bottom-right corner shows the state:
-   - `AZS synced` — up to date
-   - `AZS newer` — the server has a newer save; open the pill and choose **Sync now**
-   - `AZS conflict` — both sides changed; choose one
-   - `AZS offline` — will retry
-
-The QR is **account-level**. There is no per-device token list to manage; any number of devices can pair with the same setup link. **Reset QR** rotates the account key and invalidates older scans. Android and browsers still require a user confirmation to install an app or extension, so the setup page puts all the required links on one screen rather than pretending it can install them silently.
-
-**The phone never needs a passkey or a dashboard login.** The QR token authorizes both automatic userscript sync and the setup page's **Manual transfer** card (download the current `.sav` / upload an exported one). A passkey is only for the desktop dashboard, where you manage the QR and account. If someone only has the phone and the QR, they can sync or transfer saves without creating a session.
-
-### Manual mode (no userscript, no phone login)
-
-The **phone setup page** opened by the QR has a Manual transfer card. It uses the QR's account token, so **no passkey, recovery code, or dashboard login is needed on the phone**. This is the path for **Brave for Android** (which has no stable extension support yet):
-
-Alternatively, the signed-in desktop dashboard has the same Manual transfer card.
-
-1. In the game: **Options → Saves → Export Save**. The `.sav` lands in Downloads.
-2. Open the dashboard, sign in with the recovery code/passkey, and click **Upload .sav** in the Save card.
-3. On the other device, download the current save from the dashboard.
-4. In the game: **Options → Saves → Import Save**, pick the downloaded `.sav`, confirm.
-
-This is more taps than the userscript, but it uses no browser extensions and keeps the same version history. The dashboard handles conflicts: if the server has newer progress, it asks before replacing it.
-
-### Android notes
-
-- Install **Vivaldi** from the Play Store.
-- Open the Chrome Web Store in Vivaldi, enable **Desktop site** if needed, and install **Tampermonkey**.
-- Scan the dashboard QR. The setup page walks through Vivaldi, Tampermonkey, the userscript, and the game link.
-- Keep Brave as your normal browser; use Vivaldi only for the game if you prefer. Alternatively, use the dashboard's **manual mode** in Brave (upload/download a `.sav` around each session) without installing anything.
-- A QR scan may open your default browser. If that is Brave, the setup page offers **Copy setup link**; paste it into Vivaldi. Setting Vivaldi as the default browser makes the QR open there directly.
-- When Brave Android ships extension support, the same userscript can be installed there. As of November 2026 it is behind `brave://flags/#brave-android-extensions` and the phone UI is not finished.
-- If the game does not boot in Vivaldi, check `navigator.gpu` / open a WebGPU demo. If WebGPU is unavailable, try Lemur or Quetta; if the device cannot do WebGPU, no browser will run this game.
-
-## How the sync logic works
-
-The client stores three values in the game's localStorage:
+The userscript stores three values in the game’s localStorage:
 
 | Key | Meaning |
 | --- | --- |
 | `azs.sync.config` | `{ api, token, name }` |
 | `azs.sync.base` | The last save both sides agreed on |
-| `azs.sync.cache` | The last known remote save, used to pull before the game boots |
+| `azs.sync.cache` | The last known remote save, written before the game boots |
 
-On load:
+- Local unchanged + server changed → pull.
+- Local changed + server unchanged → push.
+- Both changed → conflict dialog: keep this device, use the server, or download both.
+- A pull keeps the previous local save in `rogue.characters.backup.1`.
+- The server uses `baseVersion` optimistic concurrency, so a stale tab cannot silently overwrite a newer save.
 
-- If the local save is unchanged since `base` and `cache` is newer, the cached remote is written synchronously before the game boots.
-- Then the userscript fetches `/api/state`; if the server is still newer, it writes the save and reloads.
-- If the local save changed, it pushes when the server is unchanged.
-- If both changed, it shows the conflict dialog: use this device, use the server, or download both.
-- Pulling stores the previous local save in `rogue.characters.backup.1`.
+### API
 
-The server uses optimistic concurrency: a push includes the `baseVersion` the client last saw. If the server is no longer there, the update is rejected with `409` and the current state, so a stale tab cannot silently overwrite a newer save.
+The userscript authenticates with the account pairing token:
 
-## API
-
-Authenticated sync endpoints use `Authorization: Bearer azs_…` with the account pairing token; the userscript also sends `X-AZS-Device` so history can label the device.
+```http
+Authorization: Bearer azs_…
+X-AZS-Device: Phone
+```
 
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
-| GET | `/api/config` | none | dashboard bootstrap |
+| GET | `/api/config` | none | dashboard bootstrap / Turnstile key |
 | GET | `/api/me` | session | current user |
 | POST | `/api/auth/register/options` | none/session | create account or add passkey |
 | POST | `/api/auth/register/verify` | challenge | verify passkey |
 | POST | `/api/auth/login/options` | none | passkey sign-in |
 | POST | `/api/auth/login/verify` | challenge | verify sign-in |
 | POST | `/api/auth/recovery` | optional recovery code | sign-in fallback |
-| POST | `/api/account/recovery` | session | create/replace the account recovery code |
 | POST | `/api/auth/logout` | session | sign out |
-| GET | `/api/pairing` | session | get the account pairing token |
-| POST | `/api/pairing/reset` | session | rotate the account pairing token |
+| POST | `/api/account/recovery` | session | create/replace optional recovery code |
+| GET | `/api/pairing` | session | account pairing token |
+| POST | `/api/pairing/reset` | session | rotate account pairing token |
 | GET | `/api/state` | session/account | current save |
 | POST | `/api/sync` | account | push with `baseVersion` |
 | POST | `/api/force` | account | user-confirmed overwrite |
 | POST | `/api/archive` | account | keep a losing save in history |
-| GET | `/api/history` | session/account | last 50 versions |
-| GET | `/api/history/:id` | session/account | one version |
-| GET | `/api/save` | session | current save for download |
-| POST | `/api/save` | session | manual upload/replace from the dashboard |
+| GET | `/api/history` | session/account | previous versions |
+| GET | `/api/history/:id` | session/account | one previous version |
+| POST | `/api/save` | session | manual upload from dashboard |
+| GET | `/api/save` | session | current save for dashboard |
 | GET | `/api/health` | none | health check |
 
-CORS is restricted to `https://wow.aethus.pl` so the userscript can call the API from the game page. The account pairing token is the actual authorization; CORS is not a security boundary outside browsers.
+CORS is restricted to `https://wow.aethus.pl` for the userscript. The account pairing token is the authorization; CORS is not a security boundary outside browsers.
 
-## Security and privacy
+### Security
 
-- The save is never decrypted. The server only sees the sealed `RSE1:` text.
-- The account pairing key is a random 32-byte value stored in D1 in a recoverable form so the dashboard can show its QR again; authentication checks a SHA-256 hash. The raw key also exists in the browser's localStorage and in the setup-link fragment (the fragment is not sent to the setup server). The setup page uses it for automatic pairing and for manual upload/download without a session. Treat the QR and database access as equivalent to save access.
-- **Reset QR** replaces the account key; every previously scanned/userscript pairing stops syncing until re-paired. There is no per-device token list.
+- Saves are never decrypted. The server stores the sealed `RSE1:` text.
+- The account pairing key is random 32 bytes. It is stored in D1 in a recoverable form so the dashboard can show its QR again; authentication checks a SHA-256 hash. The raw key also exists in the browser’s localStorage and in the setup-link fragment, which is not sent to the setup server. Treat the QR and database access as save access.
+- **Reset QR** replaces the account key; all previous scans/userscripts stop until re-paired. There is no per-device token list.
 - Passkeys are verified with `@simplewebauthn/server`; challenges are single-use, expire after five minutes, and travel in an HttpOnly cookie.
 - Dashboard sessions are HMAC-signed, HttpOnly, SameSite=Lax cookies; `SESSION_SECRET` is required.
-- Recovery codes are **optional**. When created from the dashboard, a random code is stored only as a SHA-256 hash; it is shown once and can sign in / add a passkey on another device. A new code replaces the old one. Store it like a password.
-- There is no operator-wide login. Each account's recovery code only opens that account.
-- Account creation and recovery are protected by per-IP fixed-window rate limits. Optional Cloudflare Turnstile adds a bot challenge; it requires `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`.
-- The dashboard sets a strict CSP and refuses framing. The service stores the sealed save; if you do not trust the server, self-host it.
-- Do not publish a public instance that stores other people's saves without their consent.
+- Optional recovery codes are stored only as SHA-256 hashes and shown once.
+- There is no operator-wide login.
+- Account creation and recovery are rate-limited; Turnstile is optional.
+- Self-host if you do not trust the instance.
 
-## Limitations
+### Limitations
 
-- **Whole-account replacement.** No merge. The game's import replaces the account.
-- **One writer at a time.** Playing on two devices without syncing between them creates a conflict, not a merge.
-- **One game tab at a time.** Two open tabs share the same localStorage and can race each other; the server will reject the stale writer, but the conflict is easier to avoid with one tab.
-- **Local-only progress during a run.** The game writes the save when you leave a shop/end a run; the userscript can only sync what the game has written.
-- **Game updates may change the key.** The keys are at the top of the userscript (`rogue.characters`, `rogue.characters.backup.1`). Update the userscript if the game changes them.
-- **Not affiliated with Aethus or Blizzard.** Use your own saves; this tool copies the sealed blob verbatim and does not bypass the game's tamper check.
+- **No merge.** The game’s import replaces the whole account.
+- **One writer at a time.** Two devices without syncing create a conflict.
+- **One game tab at a time.** Tabs share localStorage and can race; the server rejects the stale writer.
+- The game writes saves when you leave a shop/end a run; only written saves sync.
+- The phone setup page and direct game link require the userscript to be installed for automatic sync; Android/Tampermonkey always requires user confirmation to install.
+- No account-deletion UI yet.
 
-## Layout
+### Layout
 
-```
+```text
 src/index.js       Worker routes, CORS, static assets
-src/auth.js        passkeys, sessions, challenges
+src/auth.js        passkeys, sessions, challenges, optional recovery
 src/devices.js     legacy device-token auth + account-token auth
 src/pairing.js     account-level pairing key
 src/saves.js       optimistic save sync + history
 src/ratelimit.js   per-IP auth rate limits
-src/turnstile.js   optional Cloudflare Turnstile verification
+src/turnstile.js   optional Turnstile verification
 src/sync.js        pure sync decision + validation
 src/util.js        base64url, cookies, JSON helpers
 public/            dashboard, phone setup page, Tampermonkey userscript
 public/pair.*      token-authorized phone setup + manual transfer page
 public/vendor/     qrcode-generator (MIT) for the pairing QR
-migrations/        D1 schema (0001 initial, 0002 tokens, 0003 rate limits, 0004 pairing key)
+migrations/        D1 schema
 test/              node:test unit tests
 ```
 
-## License
+### License
 
 MIT
 
