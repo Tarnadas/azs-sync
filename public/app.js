@@ -352,7 +352,7 @@ function showRecoveryCode(code) {
   const modal = h(
     'div',
     { class: 'modal stack' },
-    h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Save your recovery code'), h('p', { class: 'muted small' }, 'This is the only way to sign in on a device that does not have your passkey. It is shown once.'))),
+    h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Optional recovery code'), h('p', { class: 'muted small' }, 'Use this to sign in on a device that does not have your passkey. It is shown once; creating a new code replaces the old one.'))),
     h('div', { class: 'token-box' }, h('div', { class: 'field' }, h('label', {}, 'Recovery code'), h('div', { class: 'token-value' }, codeInput, copy))),
     h('div', { class: 'row' }, downloadButton),
     h('div', { class: 'notice' }, h('p', {}, 'Store it like a password. It can recover the sync account, but it cannot recover a game save that was never uploaded.')),
@@ -382,9 +382,8 @@ function createAccountCard() {
     if (!challengeOk(challenge)) return;
     create.disabled = true;
     try {
-      const result = await registerPasskey(name.value.trim() || 'Player', challenge?.token);
-      if (result?.recoveryCode) showRecoveryCode(result.recoveryCode);
-      else location.reload();
+      await registerPasskey(name.value.trim() || 'Player', challenge?.token);
+      location.reload();
     } catch (error) {
       displayError(error);
       challenge?.reset();
@@ -396,7 +395,7 @@ function createAccountCard() {
   const card = h(
     'section',
     { class: 'card stack' },
-    h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Create an account'), h('p', { class: 'muted small' }, 'Each person gets their own account, pairing link, save history, and recovery code. Use a passkey (fingerprint, face, or device PIN).'))),
+    h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Create an account'), h('p', { class: 'muted small' }, 'Each person gets their own account, pairing link, devices, and save history. Use a passkey (fingerprint, face, or device PIN).'))),
     h('div', { class: 'field' }, h('label', { for: 'account-name' }, 'Display name'), name),
     challenge?.el,
     create,
@@ -421,13 +420,22 @@ function signInCard() {
     }
   });
 
+  const recoveryHost = h('div', { class: 'stack', hidden: true });
+  const showRecovery = h('button', { class: 'btn btn-ghost btn-sm' }, 'Use a recovery code');
+  showRecovery.addEventListener('click', () => {
+    if (!recoveryHost.firstChild) recoveryHost.append(recoveryForm());
+    recoveryHost.hidden = false;
+    showRecovery.hidden = true;
+  });
+
   return h(
     'section',
     { class: 'card stack' },
     h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Sign in'), h('p', { class: 'muted small' }, 'Use a passkey registered to any account on this service. The browser will let you choose the account.'))),
     signIn,
-    h('p', { class: 'muted small' }, 'Lost the passkey on this device? Use the recovery code you saved when creating the account, then add a new passkey from the dashboard.'),
-    recoveryForm(),
+    h('p', { class: 'muted small' }, 'Lost the passkey on this device? If you created an optional recovery code, you can use it below.'),
+    showRecovery,
+    recoveryHost,
     h('p', { class: 'muted small' }, 'The game itself has no login. This account only protects the sync service.'),
   );
 }
@@ -440,7 +448,8 @@ function howItWorksCard() {
     h(
       'ol',
       { class: 'steps' },
-      h('li', {}, h('strong', {}, 'Create an account '), 'with a passkey. Save the recovery code it shows once.'),
+      h('li', {}, h('strong', {}, 'Create an account '), 'with a passkey.'),
+      h('li', {}, h('strong', {}, 'Optional: '), 'click Recovery code on the dashboard if you want a fallback for a device without your passkey.'),
       h('li', {}, h('strong', {}, 'Install the userscript '), 'in the browser you play in.'),
       h('li', {}, h('strong', {}, 'Scan the QR '), 'or copy your pairing link and open it on the game page.'),
       h('li', {}, h('strong', {}, 'Play normally. '), 'The script compares the sealed save and pushes or pulls when it changes.'),
@@ -837,6 +846,20 @@ function dashboardHeader() {
     }
   });
 
+  const recovery = h('button', { class: 'btn btn-sm' }, 'Recovery code');
+  recovery.addEventListener('click', async () => {
+    if (!confirm('Create a new recovery code? Any previous recovery code for this account will stop working.')) return;
+    recovery.disabled = true;
+    try {
+      const result = await api('/api/account/recovery', { method: 'POST' });
+      showRecoveryCode(result.recoveryCode);
+    } catch (error) {
+      displayError(error);
+    } finally {
+      recovery.disabled = false;
+    }
+  });
+
   const logout = h('button', { class: 'btn btn-sm' }, 'Log out');
   logout.addEventListener('click', async () => {
     logout.disabled = true;
@@ -858,7 +881,7 @@ function dashboardHeader() {
       h('h1', {}, 'Sync dashboard'),
       h('p', { class: 'muted small' }, `Signed in as ${state.me.user.name}. The save is sealed end to end; this service only stores the blob.`),
     ),
-    h('div', { class: 'row' }, addPasskey, logout),
+    h('div', { class: 'row' }, addPasskey, recovery, logout),
   );
 }
 

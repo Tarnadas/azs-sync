@@ -7,7 +7,7 @@ The game has no login. It keeps the whole account in `localStorage['rogue.charac
 ## What it does
 
 - A **multi-user Cloudflare Worker + D1** service stores each account's current sealed save, its SHA-256 hash, version, devices, and last 50 versions.
-- A **passkey dashboard** (WebAuthn) lets anyone create an account; every account has its own recovery code, pairing links, devices, save, and history.
+- A **passkey dashboard** (WebAuthn) lets anyone create an account; every account has its own pairing links, devices, save, and history. Recovery codes are optional.
 - Per-IP rate limits protect account creation/recovery; Cloudflare Turnstile can be layered on top.
 - A **Tampermonkey userscript** runs on `https://wow.aethus.pl/*`, reads/writes the game's own `localStorage`, and pushes or pulls automatically.
 - **No merge.** The game cannot merge two accounts. If both devices changed since the last sync, the userscript asks which one to keep and archives the other in history.
@@ -56,9 +56,11 @@ openssl rand -base64 48 | npx wrangler secret put SESSION_SECRET
 npm run deploy
 ```
 
-The deployed site is **multi-user**: every visitor can create their own account with a passkey. **Each account gets its own recovery code shown once** — that code is how you sign in on a device without that account's passkey. Each account has its own dashboard, pairing links, devices, save, and history.
+The deployed site is **multi-user**: every visitor can create their own account with a passkey. Each account has its own dashboard, pairing links, devices, save, and history.
 
-There is no operator-wide login. If someone loses both their passkey and their recovery code, that account cannot be recovered.
+**Recovery codes are optional.** By default an account is passkey-only; creating it shows no recovery code. If you want a fallback for a device where your passkey does not sync, open the dashboard and click **Recovery code**. It shows a code once and replaces any earlier code for that account.
+
+There is no operator-wide login. If someone loses their passkey and never created a recovery code, that account cannot be recovered.
 
 Turnstile is optional. If you set both `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`, registration and recovery require the challenge. If you leave them unset, the built-in per-IP rate limits still apply.
 
@@ -78,7 +80,7 @@ Reload the dashboard. The widget appears on account creation and recovery. No re
 
 The built-in limits (fixed window per IP) are: **15 account-creation attempts/hour**, **30 recovery attempts/hour**, and **60 passkey-login attempts/hour**. Adjust them in `src/index.js` if your community is behind a shared NAT.
 
-> Passkeys are bound to the dashboard origin. If you later move the Worker to a custom domain, sign in with the account recovery code, add a passkey for the new origin, and keep the old one until you are sure.
+> Passkeys are bound to the dashboard origin. If you later move the Worker to a custom domain, sign in with the account recovery code (if you created one), add a passkey for the new origin, and keep the old one until you are sure.
 
 ### Local development
 
@@ -170,7 +172,8 @@ Device endpoints use `Authorization: Bearer azs_…`.
 | POST | `/api/auth/register/verify` | challenge | verify passkey |
 | POST | `/api/auth/login/options` | none | passkey sign-in |
 | POST | `/api/auth/login/verify` | challenge | verify sign-in |
-| POST | `/api/auth/recovery` | recovery code | password fallback |
+| POST | `/api/auth/recovery` | optional recovery code | sign-in fallback |
+| POST | `/api/account/recovery` | session | create/replace the account recovery code |
 | POST | `/api/auth/logout` | session | sign out |
 | GET/POST | `/api/devices` | session | list/create devices |
 | DELETE | `/api/devices/:id` | session | revoke a device |
@@ -193,7 +196,7 @@ CORS is restricted to `https://wow.aethus.pl` so the userscript can call the API
 - Device tokens are random 32-byte values. Each token is stored in D1 in a recoverable form so the dashboard can show its pairing link again; authentication checks a SHA-256 hash. The raw token also exists in the browser's localStorage and in the pairing link fragment (the fragment is not sent to the server). Treat database access as equivalent to save access.
 - Passkeys are verified with `@simplewebauthn/server`; challenges are single-use, expire after five minutes, and travel in an HttpOnly cookie.
 - Dashboard sessions are HMAC-signed, HttpOnly, SameSite=Lax cookies; `SESSION_SECRET` is required.
-- Every account gets its own random **recovery code**, stored only as a SHA-256 hash. It is shown once and can sign in / add a passkey on another device. Store it like a password.
+- Recovery codes are **optional**. When created from the dashboard, a random code is stored only as a SHA-256 hash; it is shown once and can sign in / add a passkey on another device. A new code replaces the old one. Store it like a password.
 - There is no operator-wide login. Each account's recovery code only opens that account.
 - Account creation and recovery are protected by per-IP fixed-window rate limits. Optional Cloudflare Turnstile adds a bot challenge; it requires `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`.
 - The dashboard sets a strict CSP and refuses framing. The service stores the sealed save; if you do not trust the server, self-host it.

@@ -240,8 +240,6 @@ export async function registrationVerify(request, env, body) {
   const now = Date.now();
   let user = null;
   let pendingName = null;
-  let recoveryCode = null;
-  let recoveryHash = null;
   let isNewAccount = false;
 
   if (row.data) {
@@ -257,8 +255,6 @@ export async function registrationVerify(request, env, body) {
   // new account; every visitor is allowed to do that.
   if (row.user_id && row.data) {
     isNewAccount = true;
-    recoveryCode = randomToken(32);
-    recoveryHash = await sha256Hex(recoveryCode);
     user = { id: row.user_id, name: normalizeName(pendingName), created_at: now };
   } else {
     user = await env.DB.prepare('SELECT id, name, created_at FROM users WHERE id = ?').bind(row.user_id).first();
@@ -284,8 +280,8 @@ export async function registrationVerify(request, env, body) {
   try {
     if (isNewAccount) {
       const insertUser = env.DB.prepare(
-        'INSERT INTO users (id, name, created_at, recovery_hash) VALUES (?, ?, ?, ?)',
-      ).bind(user.id, user.name, user.created_at, recoveryHash);
+        'INSERT INTO users (id, name, created_at) VALUES (?, ?, ?)',
+      ).bind(user.id, user.name, user.created_at);
       await env.DB.batch([insertUser, insertCredential]);
     } else {
       await insertCredential.run();
@@ -296,12 +292,18 @@ export async function registrationVerify(request, env, body) {
 
   const sessionCookie = await createSessionCookie(user.id, request, env);
   return {
-    data: {
-      user: { id: user.id, name: user.name },
-      ...(recoveryCode ? { recoveryCode } : {}),
-    },
+    data: { user: { id: user.id, name: user.name } },
     cookies: [sessionCookie, clearChallengeCookie(request)],
   };
+}
+
+export async function createRecoveryCode(env, user) {
+  const code = randomToken(32);
+  const hash = await sha256Hex(code);
+  await env.DB.prepare('UPDATE users SET recovery_hash = ? WHERE id = ?')
+    .bind(hash, user.id)
+    .run();
+  return code;
 }
 
 export async function authenticationOptions(request, env) {

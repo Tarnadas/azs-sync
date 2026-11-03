@@ -2,6 +2,7 @@ import {
   authenticationOptions,
   authenticationVerify,
   clearSessionCookie,
+  createRecoveryCode,
   getCredentials,
   recoveryLogin,
   registrationOptions,
@@ -144,6 +145,13 @@ async function handleAccount(request, env, url) {
   if (url.pathname === '/api/credentials' && request.method === 'GET') {
     const user = await requireSession(request, env);
     return json({ items: await getCredentials(env, user.id) });
+  }
+
+  if (url.pathname === '/api/account/recovery' && request.method === 'POST') {
+    assertSameOrigin(request);
+    const user = await requireSession(request, env);
+    const recoveryCode = await createRecoveryCode(env, user);
+    return json({ recoveryCode });
   }
 
   if (url.pathname === '/api/devices' && request.method === 'GET') {
