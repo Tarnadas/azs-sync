@@ -317,12 +317,13 @@ function authCard() {
         signIn.disabled = false;
       }
     });
+    const hasPasskey = state.config?.hasPasskeys !== false;
     return h(
       'section',
       { class: 'card stack' },
-      h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Sign in'), h('p', { class: 'muted small' }, 'Use the passkey you created for this sync account.'))),
-      signIn,
-      h('p', { class: 'muted small' }, 'Lost the passkey on this device? Use the recovery code you saved when creating the account, then add a new passkey from the dashboard.'),
+      h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Sign in'), h('p', { class: 'muted small' }, hasPasskey ? 'Use the passkey you created for this sync account.' : 'This account does not have a passkey yet. Sign in with its recovery code, then add one from the dashboard.'))),
+      hasPasskey ? signIn : h('div', { class: 'notice' }, h('p', {}, 'No passkey registered yet. Use the recovery code below to bootstrap this account.')),
+      h('p', { class: 'muted small' }, hasPasskey ? 'Lost the passkey on this device? Use the recovery code you saved when creating the account, then add a new passkey from the dashboard.' : 'After signing in, click Add passkey so future sign-ins can use a passkey.'),
       recoveryForm(),
       h('p', { class: 'muted small' }, 'The game itself has no login. This account only protects the sync service.'),
     );

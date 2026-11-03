@@ -3,6 +3,7 @@ import {
   authenticationVerify,
   clearSessionCookie,
   getCredentials,
+  hasPasskeys,
   hasUsers,
   recoveryLogin,
   registrationOptions,
@@ -69,6 +70,7 @@ async function handleAuth(request, env, url) {
     const usersExist = await hasUsers(env);
     return json({
       hasUsers: usersExist,
+      hasPasskeys: await hasPasskeys(env),
       recovery: usersExist || Boolean(env.RECOVERY_TOKEN),
       origin: new URL(env.ORIGIN || request.url).origin,
     });

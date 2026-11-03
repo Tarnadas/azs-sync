@@ -28,6 +28,11 @@ export async function hasUsers(env) {
   return Number(row?.n || 0) > 0;
 }
 
+export async function hasPasskeys(env) {
+  const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM credentials').first();
+  return Number(row?.n || 0) > 0;
+}
+
 function rpConfig(request, env) {
   const origin = new URL(env.ORIGIN || new URL(request.url).origin).origin;
   return {
