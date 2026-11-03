@@ -10,6 +10,7 @@ export async function getState(env, userId) {
 }
 
 async function touchDevice(env, deviceId, version) {
+  if (!deviceId) return;
   await env.DB.prepare('UPDATE devices SET last_seen_at = ?, last_version = ? WHERE id = ?')
     .bind(Date.now(), version, deviceId)
     .run();

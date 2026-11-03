@@ -159,6 +159,21 @@ async function handleAccount(request, env, url) {
     return json(await getState(env, user.id));
   }
 
+  if (url.pathname === '/api/save' && request.method === 'POST') {
+    assertSameOrigin(request);
+    const user = await requireSession(request, env);
+    const body = await readJson(request);
+    const current = await getState(env, user.id);
+    const result = await pushSave(env, {
+      user,
+      device: { id: null, name: 'Dashboard upload' },
+      save: body.save,
+      baseVersion: body.force ? current.version : (body.baseVersion ?? 0),
+      reason: body.force ? 'force' : 'push',
+    });
+    return json(result, result.status === 'conflict' ? 409 : 200);
+  }
+
   if (url.pathname === '/api/state' && request.method === 'GET') {
     const { user } = await requireAnyUser(request, env);
     return json(await getState(env, user.id));

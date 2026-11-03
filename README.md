@@ -96,12 +96,23 @@ npm test
    - `AZS conflict` — both sides changed; choose one
    - `AZS offline` — will retry
 
+### Manual mode (no userscript, any browser)
+
+The dashboard also works as a manual transfer tool, including in **Brave for Android** (which has no stable extension support yet):
+
+1. In the game: **Options → Saves → Export Save**. The `.sav` lands in Downloads.
+2. Open the dashboard, sign in with the recovery code/passkey, and click **Upload .sav** in the Save card.
+3. On the other device, download the current save from the dashboard.
+4. In the game: **Options → Saves → Import Save**, pick the downloaded `.sav`, confirm.
+
+This is more taps than the userscript, but it uses no browser extensions and keeps the same version history. The dashboard handles conflicts: if the server has newer progress, it asks before replacing it.
+
 ### Android notes
 
 - Install **Vivaldi** from the Play Store.
 - Open the Chrome Web Store in Vivaldi, enable **Desktop site** if needed, and install **Tampermonkey**.
 - Install the userscript from your dashboard, then use the pairing link.
-- Keep Brave as your normal browser; use Vivaldi only for the game if you prefer.
+- Keep Brave as your normal browser; use Vivaldi only for the game if you prefer. Alternatively, use the dashboard's **manual mode** in Brave (upload/download a `.sav` around each session) without installing anything.
 - When Brave Android ships extension support, the same userscript can be installed there. As of November 2026 it is behind `brave://flags/#brave-android-extensions` and the phone UI is not finished.
 - If the game does not boot in Vivaldi, check `navigator.gpu` / open a WebGPU demo. If WebGPU is unavailable, try Lemur or Quetta; if the device cannot do WebGPU, no browser will run this game.
 
@@ -148,6 +159,7 @@ Device endpoints use `Authorization: Bearer azs_…`.
 | GET | `/api/history` | session/device | last 50 versions |
 | GET | `/api/history/:id` | session/device | one version |
 | GET | `/api/save` | session | current save for download |
+| POST | `/api/save` | session | manual upload/replace from the dashboard |
 | GET | `/api/health` | none | health check |
 
 CORS is restricted to `https://wow.aethus.pl` so the userscript can call the API from the game page. The device token is the actual authorization; CORS is not a security boundary outside browsers.

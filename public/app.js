@@ -404,14 +404,95 @@ function renderAuth(error = null) {
   app.append(grid);
 }
 
+function uploadControl() {
+  const file = h('input', { type: 'file', accept: '.sav,.txt', class: 'hidden' });
+  const button = h('button', { class: 'btn' }, 'Upload .sav');
+
+  async function send(text, force = false) {
+    try {
+      await api('/api/save', {
+        method: 'POST',
+        body: { save: text, baseVersion: state.save?.version ?? 0, force },
+      });
+      toast(force ? 'Save replaced' : 'Save uploaded');
+      await loadDashboard();
+    } catch (error) {
+      if (error.status === 409 && !force) {
+        const remote = error.data || {};
+        const when = remote.updatedAt ? new Date(remote.updatedAt).toLocaleString() : 'a newer version';
+        const replace = confirm(
+          `The server has a newer save (v${remote.version ?? '?'}, ${remote.deviceName || 'unknown device'}, ${when}).\n\nReplace it with this file? The current save stays in history.`,
+        );
+        if (replace) {
+          await send(text, true);
+        } else {
+          toast('Upload cancelled');
+        }
+        return;
+      }
+      if (error.status === 409 && force) {
+        toast('The server changed again. Refresh and retry.', true);
+        return;
+      }
+      throw error;
+    }
+  }
+
+  button.addEventListener('click', () => file.click());
+  file.addEventListener('change', async () => {
+    const picked = file.files?.[0];
+    file.value = '';
+    if (!picked) return;
+    if (picked.size > 65536) {
+      toast('That file is too large for a sealed save.', true);
+      return;
+    }
+    let text = '';
+    try {
+      text = await picked.text();
+    } catch {
+      toast('Could not read that file.', true);
+      return;
+    }
+    if (!text.startsWith('RSE1:')) {
+      toast('That is not a sealed Azeroth Survivors .sav.', true);
+      return;
+    }
+    button.disabled = true;
+    try {
+      await send(text);
+    } catch (error) {
+      displayError(error);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  return h(
+    'div',
+    { class: 'row' },
+    button,
+    file,
+    h('span', { class: 'muted small' }, 'Export from the game, then upload the .sav here.'),
+  );
+}
+
 function saveCard() {
   const save = state.save;
+  const manualNote = h(
+    'p',
+    { class: 'muted small' },
+    'Manual mode: no userscript? Export from the game, upload here, then download the file on the other device and import it. Works in Brave for Android without extensions.',
+  );
+
   if (!save || save.version === 0) {
     return h(
       'section',
       { class: 'card stack' },
       h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Save'), h('p', { class: 'muted small' }, 'The current sealed account on this sync service.'))),
-      h('div', { class: 'empty' }, 'No save yet. Pair a device and play a run; the userscript will upload the first save.'),
+      h('div', { class: 'empty' }, 'No save yet. Pair a device and play a run; the userscript will upload the first save. You can also upload an exported .sav below.'),
+      uploadControl(),
+      manualNote,
     );
   }
 
@@ -439,6 +520,8 @@ function saveCard() {
       h('span', { class: 'muted small mono' }, `sha256 ${shortHash(save.hash)}`),
     ),
     h('div', { class: 'row' }, downloadButton),
+    uploadControl(),
+    manualNote,
   );
 }
 
