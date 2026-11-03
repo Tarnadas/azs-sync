@@ -175,12 +175,12 @@ Authenticated sync endpoints use `Authorization: Bearer azs_…` with the accoun
 | POST | `/api/auth/logout` | session | sign out |
 | GET | `/api/pairing` | session | get the account pairing token |
 | POST | `/api/pairing/reset` | session | rotate the account pairing token |
-| GET | `/api/state` | session/device | current save |
-| POST | `/api/sync` | device | push with `baseVersion` |
-| POST | `/api/force` | device | user-confirmed overwrite |
-| POST | `/api/archive` | device | keep a losing save in history |
-| GET | `/api/history` | session/device | last 50 versions |
-| GET | `/api/history/:id` | session/device | one version |
+| GET | `/api/state` | session/account | current save |
+| POST | `/api/sync` | account | push with `baseVersion` |
+| POST | `/api/force` | account | user-confirmed overwrite |
+| POST | `/api/archive` | account | keep a losing save in history |
+| GET | `/api/history` | session/account | last 50 versions |
+| GET | `/api/history/:id` | session/account | one version |
 | GET | `/api/save` | session | current save for download |
 | POST | `/api/save` | session | manual upload/replace from the dashboard |
 | GET | `/api/health` | none | health check |

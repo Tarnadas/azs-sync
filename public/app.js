@@ -395,7 +395,7 @@ function createAccountCard() {
   const card = h(
     'section',
     { class: 'card stack' },
-    h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Create an account'), h('p', { class: 'muted small' }, 'Each person gets their own account, pairing link, devices, and save history. Use a passkey (fingerprint, face, or device PIN).'))),
+    h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Create an account'), h('p', { class: 'muted small' }, 'Each person gets their own account, pairing QR, save history, and optional recovery code. Use a passkey (fingerprint, face, or device PIN).'))),
     h('div', { class: 'field' }, h('label', { for: 'account-name' }, 'Display name'), name),
     challenge?.el,
     create,
