@@ -17,7 +17,7 @@
     "webauthn",
     "passkey"
   ],
-  "author": "",
+  "author": "Mario Reder",
   "license": "MIT",
   "engines": {
     "node": ">=20"

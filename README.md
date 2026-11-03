@@ -244,6 +244,6 @@ test/              node:test unit tests
 
 ### License
 
-MIT
+MIT © 2026 Mario Reder
 
 The QR renderer in `public/vendor/qrcode.mjs` is [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) by Kazuhiko Arase, also MIT.
