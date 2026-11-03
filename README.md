@@ -2,7 +2,9 @@
 
 Passkey-protected cloud sync for the sealed browser save of **Azeroth Survivors** (`https://wow.aethus.pl/`).
 
-The game has no login. It keeps the whole account in `localStorage['rogue.characters']` as a sealed `RSE1:` blob (~1.6 KB), and imports replace the whole account. This project copies that blob between browsers without decrypting or re-sealing it.
+The game has no login. It keeps the whole account in `localStorage['rogue.characters']` as a sealed `RSE1:` blob, and imports replace the whole account. This project copies that blob between browsers without decrypting or re-sealing it.
+
+**TL;DR:** deploy the Worker, create an account on desktop with a passkey, scan the dashboard QR with your phone, and follow the setup page. The phone needs **no passkey and no dashboard login**; it can either install the userscript (Vivaldi/Tampermonkey) or use the token-authorized manual `.sav` transfer directly from the QR page.
 
 ## What it does
 
@@ -102,7 +104,7 @@ npm test
 ## Connect a browser
 
 1. Open the dashboard on your desktop and sign in.
-2. The **Sync to your phone** card is already there. There is no create-device step.
+2. The **Sync to your phone** card is already there. There is no create-device step. It also has a copyable **Game pair link** if you want to paste the direct game URL instead of scanning.
 3. Scan the QR with your phone camera. It opens a **setup page** (`/pair#t=…`) carrying your account pairing key.
 4. The setup page detects the browser and shows the relevant steps:
    - **Vivaldi Android:** install Tampermonkey, install the userscript, then open the game.
@@ -226,6 +228,7 @@ src/turnstile.js   optional Cloudflare Turnstile verification
 src/sync.js        pure sync decision + validation
 src/util.js        base64url, cookies, JSON helpers
 public/            dashboard, phone setup page, Tampermonkey userscript
+public/pair.*      token-authorized phone setup + manual transfer page
 public/vendor/     qrcode-generator (MIT) for the pairing QR
 migrations/        D1 schema (0001 initial, 0002 tokens, 0003 rate limits, 0004 pairing key)
 test/              node:test unit tests
