@@ -669,7 +669,8 @@ function phoneSyncCard() {
       : h('div', { class: 'notice error' }, h('p', {}, 'Could not draw the QR code. Use Copy phone setup link below.')),
     h('div', { class: 'row' }, copy, open, reset),
     h('div', { class: 'notice' }, h('p', {}, 'This QR is your account pairing key. Treat it like a password; anyone with it can sync this account. Reset it to invalidate old scans.')),
-    h('p', { class: 'muted small' }, 'On a desktop, open the setup page to install Tampermonkey and the userscript. On Brave for Android, use Manual transfer below; automatic sync needs Vivaldi or another Chromium browser with extensions.'),
+    h('p', { class: 'muted small' }, 'The phone needs no passkey or dashboard login. Scan the QR; the setup page includes automatic sync and a token-authorized Manual transfer fallback.'),
+    h('p', { class: 'muted small' }, 'On a desktop, open the setup page to install Tampermonkey and the userscript. On Brave for Android, use Manual transfer; automatic sync needs Vivaldi or another Chromium browser with extensions.'),
   );
 }
 

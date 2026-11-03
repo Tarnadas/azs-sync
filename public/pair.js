@@ -65,6 +65,138 @@ function step(number, title, body, actions) {
   );
 }
 
+async function apiState() {
+  const response = await fetch('/api/state', {
+    headers: {
+      authorization: `Bearer ${token}`,
+      'x-azs-device': deviceName,
+    },
+    cache: 'no-store',
+  });
+  if (!response.ok) {
+    const error = new Error(response.status === 401 ? 'Pairing link was reset or is invalid.' : `HTTP ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+  return response.json();
+}
+
+let currentSave = null;
+let manualError = null;
+let manualHost = null;
+
+function drawManual() {
+  if (!manualHost) return;
+  manualHost.textContent = '';
+  const box = el(
+    'div',
+    { class: 'manual-box' },
+    el('h3', {}, 'Manual transfer'),
+    el('p', { class: 'muted small' }, 'No passkey and no login on this phone. The QR link itself authorizes the transfer.'),
+  );
+
+  if (manualError) {
+    box.append(el('div', { class: 'notice error' }, el('p', {}, manualError.message || String(manualError))));
+    const retry = el('button', { class: 'btn btn-sm', type: 'button' }, 'Retry');
+    retry.addEventListener('click', refreshManual);
+    box.append(retry);
+    manualHost.append(box);
+    return;
+  }
+
+  if (!currentSave) {
+    box.append(el('p', { class: 'muted small' }, 'Loading the current save…'));
+    manualHost.append(box);
+    return;
+  }
+
+  if (currentSave.version > 0) {
+    box.append(el('p', { class: 'manual-status' }, `Current server save: v${currentSave.version}, ${currentSave.deviceName || 'unknown device'}, ${currentSave.updatedAt ? new Date(currentSave.updatedAt).toLocaleString() : 'unknown time'}.`));
+    const downloadButton = el('button', { class: 'btn', type: 'button' }, 'Download current .sav');
+    downloadButton.addEventListener('click', () => {
+      const url = URL.createObjectURL(new Blob([currentSave.save], { type: 'application/octet-stream' }));
+      const anchor = el('a', { href: url, download: `AzerothSurvivors-sync-v${currentSave.version}.sav` });
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    });
+    box.append(downloadButton);
+  } else {
+    box.append(el('p', { class: 'manual-status' }, 'No save on the server yet. Export one from the game and upload it below.'));
+  }
+
+  const file = el('input', { type: 'file', accept: '.sav,.txt', class: 'hidden' });
+  const upload = el('button', { class: 'btn', type: 'button' }, 'Upload exported .sav');
+  upload.addEventListener('click', () => file.click());
+  file.addEventListener('change', async () => {
+    const picked = file.files?.[0];
+    file.value = '';
+    if (!picked) return;
+    if (picked.size > 65536) {
+      alert('That file is too large for a sealed save.');
+      return;
+    }
+    const text = await picked.text();
+    if (!text.startsWith('RSE1:')) {
+      alert('That is not a sealed Azeroth Survivors .sav.');
+      return;
+    }
+    upload.disabled = true;
+    try {
+      const baseVersion = currentSave?.version ?? 0;
+      let response = await fetch('/api/sync', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'x-azs-device': deviceName,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ baseVersion, save: text }),
+      });
+      let data = await response.json();
+      if (response.status === 409) {
+        const replace = confirm(`The server has a newer save (v${data.version}, ${data.deviceName || 'unknown device'}). Replace it with this file? The current save stays in history.`);
+        if (!replace) return;
+        response = await fetch('/api/force', {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${token}`,
+            'x-azs-device': deviceName,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ baseVersion: data.version, save: text }),
+        });
+        data = await response.json();
+      }
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      alert(`Uploaded v${data.version}.`);
+      await refreshManual();
+    } catch (error) {
+      alert(error.message || 'Upload failed.');
+    } finally {
+      upload.disabled = false;
+    }
+  });
+
+  box.append(
+    el('div', { class: 'row' }, upload, file),
+    el('p', { class: 'muted small' }, 'To push this phone: export from the game, then upload. To pull: download here, then game → Options → Saves → Import Save.'),
+  );
+  manualHost.append(box);
+}
+
+async function refreshManual() {
+  try {
+    currentSave = await apiState();
+    manualError = null;
+  } catch (error) {
+    currentSave = null;
+    manualError = error;
+  }
+  drawManual();
+}
+
 function linkButton(label, href, primary = false, external = false) {
   return el('a', {
     class: `btn${primary ? ' btn-primary' : ''}`,
@@ -116,7 +248,7 @@ function render() {
   } else if (isAndroid) {
     card.append(el('div', { class: 'pair-status' }, el('span', { class: 'badge gold' }, 'Brave / Chrome on Android'), el('span', { class: 'muted small' }, 'Automatic sync needs Vivaldi, which supports Chrome extensions.')));
   } else {
-    card.append(el('div', { class: 'pair-status' }, el('span', { class: 'badge gold' }, 'This browser'), el('span', { class: 'muted small' }, 'Use manual transfer on the dashboard.')));
+    card.append(el('div', { class: 'pair-status' }, el('span', { class: 'badge gold' }, 'This browser'), el('span', { class: 'muted small' }, 'Use manual transfer below.')));
   }
 
   if (isAndroid && !isVivaldi) {
@@ -136,14 +268,12 @@ function render() {
       el(
         'div',
         { class: 'notice pair-note' },
-        el('p', {}, 'No extensions? Use Manual transfer on the dashboard instead: export a .sav from the game, upload it, then import it on the other device.'),
-        el('div', { class: 'row' }, linkButton('Open manual dashboard', dashboard, false, true)),
+        el('p', {}, 'No extensions? Use Manual transfer below. It needs no passkey or login; this QR link is the key.'),
       ),
     );
   } else if (isIOS) {
     card.append(
-      el('div', { class: 'notice' }, el('p', {}, 'iOS browsers cannot install this userscript. Use manual transfer on the dashboard.')),
-      el('div', { class: 'row' }, linkButton('Open manual dashboard', dashboard, true, true)),
+      el('div', { class: 'notice' }, el('p', {}, 'iOS browsers cannot install this userscript. Use Manual transfer below; no login is needed.')),
     );
   } else {
     card.append(
@@ -168,6 +298,10 @@ function render() {
     );
   }
 
+  manualHost = el('div');
+  card.append(manualHost);
+  refreshManual();
+
   card.append(
     el(
       'div',
@@ -175,7 +309,7 @@ function render() {
       el('p', {}, 'This setup link is your account pairing key. Anyone who has it can sync this account. Treat it like a password.'),
       el('div', { class: 'row' }, copySetup, copyGame),
     ),
-    el('p', { class: 'pair-foot' }, 'You can reset the QR from the dashboard if this link leaks. The save itself stays on the server.'),
+    el('p', { class: 'pair-foot' }, 'Neither path needs a passkey on the phone. Reset the QR from the dashboard if this link leaks; the save stays on the server.'),
   );
 
   root.append(card);

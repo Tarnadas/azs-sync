@@ -34,6 +34,16 @@
 .step-muted { opacity: .55; }
 .pair-foot { margin-top: 18px; color: var(--muted); font-size: 12px; }
 .pair-note { margin-top: 14px; }
+.manual-box {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(15, 13, 10, .55);
+}
+.manual-status { color: var(--muted); font-size: 13px; }
 @media (max-width: 520px) {
   .pair-card { padding: 16px; }
   .step { grid-template-columns: 30px 1fr; padding: 12px; }

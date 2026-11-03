@@ -117,9 +117,13 @@ npm test
 
 The QR is **account-level**. There is no per-device token list to manage; any number of devices can pair with the same setup link. **Reset QR** rotates the account key and invalidates older scans. Android and browsers still require a user confirmation to install an app or extension, so the setup page puts all the required links on one screen rather than pretending it can install them silently.
 
-### Manual mode (no userscript, any browser)
+**The phone never needs a passkey or a dashboard login.** The QR token authorizes both automatic userscript sync and the setup page's **Manual transfer** card (download the current `.sav` / upload an exported one). A passkey is only for the desktop dashboard, where you manage the QR and account. If someone only has the phone and the QR, they can sync or transfer saves without creating a session.
 
-The dashboard also works as a manual transfer tool, including in **Brave for Android** (which has no stable extension support yet):
+### Manual mode (no userscript, no phone login)
+
+The **phone setup page** opened by the QR has a Manual transfer card. It uses the QR's account token, so **no passkey, recovery code, or dashboard login is needed on the phone**. This is the path for **Brave for Android** (which has no stable extension support yet):
+
+Alternatively, the signed-in desktop dashboard has the same Manual transfer card.
 
 1. In the game: **Options → Saves → Export Save**. The `.sav` lands in Downloads.
 2. Open the dashboard, sign in with the recovery code/passkey, and click **Upload .sav** in the Save card.
@@ -190,7 +194,7 @@ CORS is restricted to `https://wow.aethus.pl` so the userscript can call the API
 ## Security and privacy
 
 - The save is never decrypted. The server only sees the sealed `RSE1:` text.
-- The account pairing key is a random 32-byte value stored in D1 in a recoverable form so the dashboard can show its QR again; authentication checks a SHA-256 hash. The raw key also exists in the browser's localStorage and in the setup-link fragment (the fragment is not sent to the setup server). Treat the QR and database access as equivalent to save access.
+- The account pairing key is a random 32-byte value stored in D1 in a recoverable form so the dashboard can show its QR again; authentication checks a SHA-256 hash. The raw key also exists in the browser's localStorage and in the setup-link fragment (the fragment is not sent to the setup server). The setup page uses it for automatic pairing and for manual upload/download without a session. Treat the QR and database access as equivalent to save access.
 - **Reset QR** replaces the account key; every previously scanned/userscript pairing stops syncing until re-paired. There is no per-device token list.
 - Passkeys are verified with `@simplewebauthn/server`; challenges are single-use, expire after five minutes, and travel in an HttpOnly cookie.
 - Dashboard sessions are HMAC-signed, HttpOnly, SameSite=Lax cookies; `SESSION_SECRET` is required.
