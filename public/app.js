@@ -683,7 +683,7 @@ function historyCard() {
         h(
           'table',
           {},
-          h('thead', {}, h('tr', {}, h('th', {}, 'Version'), h('th', {}, 'When'), h('th', {}, 'Device'), h('th', {}, 'Reason'), h('th', {}, 'Size'), h('th', {}, ''))),
+          h('thead', {}, h('tr', {}, h('th', {}, 'Version'), h('th', {}, 'When'), h('th', {}, 'Previous device'), h('th', {}, 'Reason'), h('th', {}, 'Size'), h('th', {}, ''))),
           h(
             'tbody',
             {},
@@ -715,12 +715,12 @@ function historyCard() {
           ),
         ),
       )
-    : h('div', { class: 'empty' }, 'No history yet. Each push or overwrite keeps the previous version here.');
+    : h('div', { class: 'empty' }, 'No previous versions yet. The current save is shown above.');
 
   return h(
     'section',
     { class: 'card stack' },
-    h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'History'), h('p', { class: 'muted small' }, 'The last 50 versions. Every download is a sealed save the game can import.'))),
+    h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'History'), h('p', { class: 'muted small' }, 'Previous versions replaced by a sync. The current save is in the Manual transfer card above. Every download is a sealed save the game can import.'))),
     content,
   );
 }
