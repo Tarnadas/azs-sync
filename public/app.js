@@ -204,13 +204,13 @@ function authenticationResponse(credential) {
   };
 }
 
-async function registerPasskey(name) {
+async function registerPasskey(name, turnstileToken) {
   if (!window.PublicKeyCredential) {
     throw new Error('This browser does not support passkeys.');
   }
   const options = await api('/api/auth/register/options', {
     method: 'POST',
-    body: { name },
+    body: { name, turnstileToken },
   });
   const publicKey = prepareCreationOptions(options.publicKey);
   const credential = await navigator.credentials.create({ publicKey });
@@ -235,14 +235,74 @@ async function loginPasskey() {
   });
 }
 
+let turnstileLoader = null;
+
+function loadTurnstile() {
+  if (!state.config?.turnstileSiteKey) return Promise.resolve(null);
+  if (window.turnstile) return Promise.resolve(window.turnstile);
+  if (turnstileLoader) return turnstileLoader;
+  turnstileLoader = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+    script.async = true;
+    script.onload = () => resolve(window.turnstile);
+    script.onerror = () => reject(new Error('Could not load the verification widget.'));
+    document.head.append(script);
+  });
+  return turnstileLoader;
+}
+
+function turnstileWidget() {
+  if (!state.config?.turnstileSiteKey) return null;
+  const holder = {
+    el: h('div', { class: 'turnstile' }),
+    token: null,
+    widget: null,
+    reset() {
+      this.token = null;
+      if (window.turnstile && this.widget !== null) window.turnstile.reset(this.widget);
+    },
+  };
+  loadTurnstile()
+    .then((turnstile) => {
+      if (!turnstile) return;
+      holder.widget = turnstile.render(holder.el, {
+        sitekey: state.config.turnstileSiteKey,
+        theme: 'dark',
+        callback: (token) => {
+          holder.token = token;
+        },
+        'expired-callback': () => {
+          holder.token = null;
+        },
+        'error-callback': () => {
+          holder.token = null;
+        },
+      });
+    })
+    .catch(() => {
+      holder.el.append(h('div', { class: 'muted small' }, 'Verification widget unavailable.'));
+    });
+  return holder;
+}
+
+function challengeOk(holder) {
+  if (!state.config?.turnstileSiteKey) return true;
+  if (!holder?.token) {
+    toast('Complete the verification challenge first.', true);
+    return false;
+  }
+  return true;
+}
+
 function recoveryForm() {
-  if (!state.config?.recovery) return null;
   const input = h('input', {
     class: 'input mono',
     type: 'password',
     autocomplete: 'one-time-code',
     placeholder: 'Recovery code',
   });
+  const challenge = turnstileWidget();
   const button = h('button', { class: 'btn', type: 'submit' }, 'Use recovery code');
   const form = h(
     'form',
@@ -250,21 +310,24 @@ function recoveryForm() {
       class: 'stack',
       onsubmit: async (event) => {
         event.preventDefault();
+        if (!challengeOk(challenge)) return;
         button.disabled = true;
         try {
           await api('/api/auth/recovery', {
             method: 'POST',
-            body: { code: input.value.trim() },
+            body: { code: input.value.trim(), turnstileToken: challenge?.token },
           });
           location.reload();
         } catch (error) {
           displayError(error);
+          challenge?.reset();
         } finally {
           button.disabled = false;
         }
       },
     },
     input,
+    challenge?.el,
     button,
   );
   return form;
@@ -303,32 +366,7 @@ function showRecoveryCode(code) {
   document.body.append(backdrop);
 }
 
-function authCard() {
-  if (state.config?.hasUsers) {
-    const signIn = h('button', { class: 'btn btn-primary' }, 'Sign in with a passkey');
-    signIn.addEventListener('click', async () => {
-      signIn.disabled = true;
-      try {
-        await loginPasskey();
-        location.reload();
-      } catch (error) {
-        displayError(error);
-      } finally {
-        signIn.disabled = false;
-      }
-    });
-    const hasPasskey = state.config?.hasPasskeys !== false;
-    return h(
-      'section',
-      { class: 'card stack' },
-      h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Sign in'), h('p', { class: 'muted small' }, hasPasskey ? 'Use the passkey you created for this sync account.' : 'This account does not have a passkey yet. Sign in with its recovery code, then add one from the dashboard.'))),
-      hasPasskey ? signIn : h('div', { class: 'notice' }, h('p', {}, 'No passkey registered yet. Use the recovery code below to bootstrap this account.')),
-      h('p', { class: 'muted small' }, hasPasskey ? 'Lost the passkey on this device? Use the recovery code you saved when creating the account, then add a new passkey from the dashboard.' : 'After signing in, click Add passkey so future sign-ins can use a passkey.'),
-      recoveryForm(),
-      h('p', { class: 'muted small' }, 'The game itself has no login. This account only protects the sync service.'),
-    );
-  }
-
+function createAccountCard() {
   const name = h('input', {
     id: 'account-name',
     class: 'input',
@@ -338,15 +376,18 @@ function authCard() {
     autocomplete: 'nickname',
     value: '',
   });
+  const challenge = turnstileWidget();
   const create = h('button', { class: 'btn btn-primary' }, 'Create account with a passkey');
   create.addEventListener('click', async () => {
+    if (!challengeOk(challenge)) return;
     create.disabled = true;
     try {
-      const result = await registerPasskey(name.value.trim() || 'Player');
+      const result = await registerPasskey(name.value.trim() || 'Player', challenge?.token);
       if (result?.recoveryCode) showRecoveryCode(result.recoveryCode);
       else location.reload();
     } catch (error) {
       displayError(error);
+      challenge?.reset();
     } finally {
       create.disabled = false;
     }
@@ -355,20 +396,58 @@ function authCard() {
   const card = h(
     'section',
     { class: 'card stack' },
-    h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Create your sync account'), h('p', { class: 'muted small' }, 'Use a passkey (fingerprint, face, or device PIN). There is no password to remember.'))),
+    h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Create an account'), h('p', { class: 'muted small' }, 'Each person gets their own account, pairing link, save history, and recovery code. Use a passkey (fingerprint, face, or device PIN).'))),
     h('div', { class: 'field' }, h('label', { for: 'account-name' }, 'Display name'), name),
+    challenge?.el,
     create,
   );
   if (!window.PublicKeyCredential) {
     card.append(h('div', { class: 'notice error' }, h('p', {}, 'This browser does not support WebAuthn passkeys. Use a current Chromium, Safari, or Firefox browser.')));
   }
-  const recovery = recoveryForm();
-  if (recovery) {
-    card.append(h('hr', { class: 'divider' }));
-    card.append(h('p', { class: 'muted small' }, 'No passkey provider on this device? Use the recovery token configured by the server operator.'));
-    card.append(recovery);
-  }
   return card;
+}
+
+function signInCard() {
+  const signIn = h('button', { class: 'btn btn-primary' }, 'Sign in with a passkey');
+  signIn.addEventListener('click', async () => {
+    signIn.disabled = true;
+    try {
+      await loginPasskey();
+      location.reload();
+    } catch (error) {
+      displayError(error);
+    } finally {
+      signIn.disabled = false;
+    }
+  });
+
+  return h(
+    'section',
+    { class: 'card stack' },
+    h('div', { class: 'card-head' }, h('div', {}, h('h2', {}, 'Sign in'), h('p', { class: 'muted small' }, 'Use a passkey registered to any account on this service. The browser will let you choose the account.'))),
+    signIn,
+    h('p', { class: 'muted small' }, 'Lost the passkey on this device? Use the recovery code you saved when creating the account, then add a new passkey from the dashboard.'),
+    recoveryForm(),
+    h('p', { class: 'muted small' }, 'The game itself has no login. This account only protects the sync service.'),
+  );
+}
+
+function howItWorksCard() {
+  return h(
+    'section',
+    { class: 'card plain stack' },
+    h('h2', {}, 'How it works'),
+    h(
+      'ol',
+      { class: 'steps' },
+      h('li', {}, h('strong', {}, 'Create an account '), 'with a passkey. Save the recovery code it shows once.'),
+      h('li', {}, h('strong', {}, 'Install the userscript '), 'in the browser you play in.'),
+      h('li', {}, h('strong', {}, 'Scan the QR '), 'or copy your pairing link and open it on the game page.'),
+      h('li', {}, h('strong', {}, 'Play normally. '), 'The script compares the sealed save and pushes or pulls when it changes.'),
+      h('li', {}, h('strong', {}, 'Brave Android? '), 'Skip the link and use manual transfer on the dashboard.'),
+    ),
+    h('div', { class: 'notice' }, h('p', {}, 'Every account has its own pairing link, device tokens, save, and history. Importing a save replaces the whole account; this tool never merges two saves.')),
+  );
 }
 
 function renderAuth(error = null) {
@@ -378,34 +457,22 @@ function renderAuth(error = null) {
       'div',
       { class: 'hero' },
       h('h1', {}, 'Your save, on every device.'),
-      h('p', {}, 'Azeroth Survivors keeps its account in the browser. This service syncs that sealed save through a private, passkey-protected account — desktop to phone and back.'),
+      h('p', {}, 'Azeroth Survivors keeps its account in the browser. This service syncs that sealed save through a private, passkey-protected account — desktop to phone and back. Anyone can create their own account.'),
     ),
   );
 
-  const grid = h('div', { class: 'grid' });
-  grid.append(authCard());
-  grid.append(
+  app.append(
     h(
-      'section',
-      { class: 'card plain stack' },
-      h('h2', {}, 'How it works'),
-      h(
-        'ol',
-        { class: 'steps' },
-        h('li', {}, h('strong', {}, 'Create an account '), 'with a passkey.'),
-        h('li', {}, h('strong', {}, 'Install the userscript '), 'in the browser you play in.'),
-        h('li', {}, h('strong', {}, 'Scan the QR '), 'or copy the pairing link and open it on the game page.'),
-        h('li', {}, h('strong', {}, 'Play normally. '), 'The script compares the sealed save and pushes or pulls when it changes.'),
-        h('li', {}, h('strong', {}, 'Brave Android? '), 'Skip the link and use manual transfer on the dashboard.'),
-      ),
-      h('div', { class: 'notice' }, h('p', {}, 'Importing a save replaces the whole account. This tool never merges two saves; when both devices have new progress it asks which one to keep and stores the other in history.')),
+      'div',
+      { class: 'stack-lg' },
+      h('div', { class: 'grid' }, createAccountCard(), signInCard()),
+      howItWorksCard(),
     ),
   );
 
   if (error) {
     app.append(h('div', { class: 'notice error' }, h('p', {}, error.message || String(error))));
   }
-  app.append(grid);
 }
 
 function uploadControl() {

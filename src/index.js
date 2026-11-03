@@ -3,14 +3,14 @@ import {
   authenticationVerify,
   clearSessionCookie,
   getCredentials,
-  hasPasskeys,
-  hasUsers,
   recoveryLogin,
   registrationOptions,
   registrationVerify,
   requireSession,
   sessionUser,
 } from './auth.js';
+import { enforceRateLimit } from './ratelimit.js';
+import { verifyTurnstile } from './turnstile.js';
 import {
   authenticateDevice,
   createDevice,
@@ -67,11 +67,8 @@ async function requireAnyUser(request, env) {
 
 async function handleAuth(request, env, url) {
   if (url.pathname === '/api/config' && request.method === 'GET') {
-    const usersExist = await hasUsers(env);
     return json({
-      hasUsers: usersExist,
-      hasPasskeys: await hasPasskeys(env),
-      recovery: usersExist || Boolean(env.RECOVERY_TOKEN),
+      turnstileSiteKey: env.TURNSTILE_SITE_KEY || null,
       origin: new URL(env.ORIGIN || request.url).origin,
     });
   }
@@ -92,6 +89,10 @@ async function handleAuth(request, env, url) {
     assertSameOrigin(request);
     const body = await readJson(request);
     const session = await sessionUser(request, env);
+    if (!session) {
+      await enforceRateLimit(env, request, 'register-options', 15, 60 * 60 * 1000);
+      await verifyTurnstile(request, env, body.turnstileToken);
+    }
     const { data, cookies } = await registrationOptions(request, env, {
       name: body.name,
       session,
@@ -102,12 +103,14 @@ async function handleAuth(request, env, url) {
   if (url.pathname === '/api/auth/register/verify' && request.method === 'POST') {
     assertSameOrigin(request);
     const body = await readJson(request);
+    await enforceRateLimit(env, request, 'register-verify', 30, 60 * 60 * 1000);
     const { data, cookies } = await registrationVerify(request, env, body);
     return jsonWithCookies(data, 200, cookies);
   }
 
   if (url.pathname === '/api/auth/login/options' && request.method === 'POST') {
     assertSameOrigin(request);
+    await enforceRateLimit(env, request, 'login-options', 60, 60 * 60 * 1000);
     const { data, cookies } = await authenticationOptions(request, env);
     return jsonWithCookies(data, 200, cookies);
   }
@@ -115,6 +118,7 @@ async function handleAuth(request, env, url) {
   if (url.pathname === '/api/auth/login/verify' && request.method === 'POST') {
     assertSameOrigin(request);
     const body = await readJson(request);
+    await enforceRateLimit(env, request, 'login-verify', 60, 60 * 60 * 1000);
     const { data, cookies } = await authenticationVerify(request, env, body);
     return jsonWithCookies(data, 200, cookies);
   }
@@ -122,6 +126,8 @@ async function handleAuth(request, env, url) {
   if (url.pathname === '/api/auth/recovery' && request.method === 'POST') {
     assertSameOrigin(request);
     const body = await readJson(request);
+    await enforceRateLimit(env, request, 'recovery', 30, 60 * 60 * 1000);
+    await verifyTurnstile(request, env, body.turnstileToken);
     const { data, cookies } = await recoveryLogin(request, env, body);
     return jsonWithCookies(data, 200, cookies);
   }

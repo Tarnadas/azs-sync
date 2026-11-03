@@ -6,8 +6,9 @@ The game has no login. It keeps the whole account in `localStorage['rogue.charac
 
 ## What it does
 
-- A **Cloudflare Worker + D1** service stores the current sealed save, its SHA-256 hash, a version number, the device that wrote it, and the last 50 versions.
-- A **passkey dashboard** (WebAuthn) creates the sync account, manages device tokens, downloads saves, and browses history.
+- A **multi-user Cloudflare Worker + D1** service stores each account's current sealed save, its SHA-256 hash, version, devices, and last 50 versions.
+- A **passkey dashboard** (WebAuthn) lets anyone create an account; every account has its own recovery code, pairing links, devices, save, and history.
+- Per-IP rate limits protect account creation/recovery; Cloudflare Turnstile can be layered on top.
 - A **Tampermonkey userscript** runs on `https://wow.aethus.pl/*`, reads/writes the game's own `localStorage`, and pushes or pulls automatically.
 - **No merge.** The game cannot merge two accounts. If both devices changed since the last sync, the userscript asks which one to keep and archives the other in history.
 
@@ -46,20 +47,38 @@ npm run db:migrate:remote
 # 4. Sign the dashboard session cookie.
 openssl rand -base64 48 | npx wrangler secret put SESSION_SECRET
 
-# 5. Set an operator recovery token. This is the bootstrap login on a browser
-#    without a platform passkey provider (common on Linux) and an emergency
-#    fallback. Recommended.
-openssl rand -base64 48 | npx wrangler secret put RECOVERY_TOKEN
+# 5. Optional: Cloudflare Turnstile for account creation and recovery.
+#    Create a widget for your Worker domain in the Cloudflare dashboard first.
+# npx wrangler secret put TURNSTILE_SITE_KEY
+# npx wrangler secret put TURNSTILE_SECRET_KEY
 
 # 6. Deploy.
 npm run deploy
 ```
 
-Open the deployed `https://azs-sync.<your-subdomain>.workers.dev/` URL and create the account with a passkey. **Save the recovery code shown after registration** — it is shown once, and it is how you sign in on a device that does not have your passkey yet. From there you can add a passkey on each device.
+The deployed site is **multi-user**: every visitor can create their own account with a passkey. **Each account gets its own recovery code shown once** — that code is how you sign in on a device without that account's passkey. Each account has its own dashboard, pairing links, devices, save, and history.
 
-If your desktop browser has no platform passkey provider (common on Linux), the first-run screen also offers the operator recovery token. Use it to create the account, then add a passkey on your phone. If your phone does not have the passkey yet: open the dashboard in the phone browser, sign in with **Use recovery code**, then click **Add passkey** to create a phone-local passkey. After that, normal passkey sign-in works on both devices.
+There is no operator-wide login. If someone loses both their passkey and their recovery code, that account cannot be recovered.
 
-> Passkeys are bound to the dashboard origin. If you later move the Worker to a custom domain, log in with the recovery code (or the old passkey), add a passkey for the new origin, and keep the old one until you are sure.
+Turnstile is optional. If you set both `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`, registration and recovery require the challenge. If you leave them unset, the built-in per-IP rate limits still apply.
+
+To activate Turnstile:
+
+1. Cloudflare dashboard → **Turnstile** → **Add widget**.
+2. Add your Worker hostname, e.g. `azs-sync.<your-subdomain>.workers.dev`.
+3. Copy the site key and secret key.
+4. Set them on the Worker:
+
+   ```bash
+   npx wrangler secret put TURNSTILE_SITE_KEY
+   npx wrangler secret put TURNSTILE_SECRET_KEY
+   ```
+
+Reload the dashboard. The widget appears on account creation and recovery. No redeploy is needed; the Worker reads the secrets from `/api/config`.
+
+The built-in limits (fixed window per IP) are: **15 account-creation attempts/hour**, **30 recovery attempts/hour**, and **60 passkey-login attempts/hour**. Adjust them in `src/index.js` if your community is behind a shared NAT.
+
+> Passkeys are bound to the dashboard origin. If you later move the Worker to a custom domain, sign in with the account recovery code, add a passkey for the new origin, and keep the old one until you are sure.
 
 ### Local development
 
@@ -70,7 +89,7 @@ npm run dev
 # http://localhost:8787
 ```
 
-The example `.dev.vars` includes `RECOVERY_TOKEN=dev-recovery-token`, so you can sign in locally without a platform authenticator. Do not deploy with that token.
+There is no local operator login. Create an account with a passkey, or set Cloudflare's documented Turnstile test keys in `.dev.vars` if you want to exercise the widget locally. The rate limits apply locally too; delete the `rate_limits` table rows to reset them.
 
 **Localhost is same-machine only.** A phone cannot reach `http://localhost:8787`, and a pairing link generated there embeds localhost. Deploy the Worker before pairing a phone or using manual transfer on another device. A passkey made on localhost is also bound to localhost.
 
@@ -174,8 +193,9 @@ CORS is restricted to `https://wow.aethus.pl` so the userscript can call the API
 - Device tokens are random 32-byte values. Each token is stored in D1 in a recoverable form so the dashboard can show its pairing link again; authentication checks a SHA-256 hash. The raw token also exists in the browser's localStorage and in the pairing link fragment (the fragment is not sent to the server). Treat database access as equivalent to save access.
 - Passkeys are verified with `@simplewebauthn/server`; challenges are single-use, expire after five minutes, and travel in an HttpOnly cookie.
 - Dashboard sessions are HMAC-signed, HttpOnly, SameSite=Lax cookies; `SESSION_SECRET` is required.
-- Every account created through the dashboard gets a random **recovery code**, stored only as a SHA-256 hash. It is shown once and can sign in / add a passkey on another device. Store it like a password.
-- `RECOVERY_TOKEN` is an operator fallback for a fresh instance or an emergency, and the bootstrap login on a browser without a platform passkey provider. It is a full account login. Use a long random value and store it like a password.
+- Every account gets its own random **recovery code**, stored only as a SHA-256 hash. It is shown once and can sign in / add a passkey on another device. Store it like a password.
+- There is no operator-wide login. Each account's recovery code only opens that account.
+- Account creation and recovery are protected by per-IP fixed-window rate limits. Optional Cloudflare Turnstile adds a bot challenge; it requires `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`.
 - The dashboard sets a strict CSP and refuses framing. The service stores the sealed save; if you do not trust the server, self-host it.
 - Do not publish a public instance that stores other people's saves without their consent.
 
@@ -195,11 +215,13 @@ src/index.js       Worker routes, CORS, static assets
 src/auth.js        passkeys, sessions, challenges
 src/devices.js     device tokens
 src/saves.js       optimistic save sync + history
+src/ratelimit.js   per-IP auth rate limits
+src/turnstile.js   optional Cloudflare Turnstile verification
 src/sync.js        pure sync decision + validation
 src/util.js        base64url, cookies, JSON helpers
 public/            dashboard + Tampermonkey userscript
 public/vendor/     qrcode-generator (MIT) for the pairing QR
-migrations/        D1 schema (0001 initial, 0002 stored pairing tokens)
+migrations/        D1 schema (0001 initial, 0002 tokens, 0003 rate limits)
 test/              node:test unit tests
 ```
 

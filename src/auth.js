@@ -28,11 +28,6 @@ export async function hasUsers(env) {
   return Number(row?.n || 0) > 0;
 }
 
-export async function hasPasskeys(env) {
-  const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM credentials').first();
-  return Number(row?.n || 0) > 0;
-}
-
 function rpConfig(request, env) {
   const origin = new URL(env.ORIGIN || new URL(request.url).origin).origin;
   return {
@@ -158,7 +153,6 @@ function normalizeName(name, fallback = 'Player') {
 
 export async function registrationOptions(request, env, { name, session }) {
   const { origin, rpID, rpName } = rpConfig(request, env);
-  const usersExist = await hasUsers(env);
 
   let userId;
   let userName;
@@ -185,7 +179,6 @@ export async function registrationOptions(request, env, { name, session }) {
       return { id: row.id, transports };
     });
   } else {
-    if (usersExist) throw new HttpError(403, 'an account already exists; sign in instead');
     pendingName = normalizeName(name);
     userId = randomId();
     userName = pendingName;
@@ -260,10 +253,9 @@ export async function registrationVerify(request, env, body) {
   }
 
   // A registration started by a signed-in user adds a passkey to that
-  // account. A registration started from the first-run form creates the
-  // account, but only if nobody else created one in the meantime.
+  // account. A registration started from the create-account form creates a
+  // new account; every visitor is allowed to do that.
   if (row.user_id && row.data) {
-    if (await hasUsers(env)) throw new HttpError(409, 'an account already exists; sign in instead');
     isNewAccount = true;
     recoveryCode = randomToken(32);
     recoveryHash = await sha256Hex(recoveryCode);
@@ -378,25 +370,13 @@ export async function recoveryLogin(request, env, body) {
   const provided = String(body?.code || body?.token || '').trim();
   if (!provided) throw new HttpError(400, 'recovery code is required');
 
-  // Every account created through the dashboard gets a one-time recovery
-  // code, stored only as a hash. The operator's RECOVERY_TOKEN is an
-  // additional fallback for a fresh instance or an emergency.
-  let user = await env.DB.prepare(
+  // Each account has its own recovery code, stored only as a hash. There is
+  // deliberately no operator-wide master login in a multi-user deployment.
+  const user = await env.DB.prepare(
     'SELECT id, name, created_at FROM users WHERE recovery_hash = ?',
   )
     .bind(await sha256Hex(provided))
     .first();
-
-  if (!user && env.RECOVERY_TOKEN && timingSafeEqual(provided, env.RECOVERY_TOKEN)) {
-    user = await env.DB.prepare('SELECT id, name, created_at FROM users ORDER BY created_at LIMIT 1').first();
-    if (!user) {
-      const now = Date.now();
-      user = { id: randomId(), name: 'Player', created_at: now };
-      await env.DB.prepare('INSERT INTO users (id, name, created_at) VALUES (?, ?, ?)')
-        .bind(user.id, user.name, user.created_at)
-        .run();
-    }
-  }
 
   if (!user) throw new HttpError(401, 'invalid recovery code');
   const sessionCookie = await createSessionCookie(user.id, request, env);
